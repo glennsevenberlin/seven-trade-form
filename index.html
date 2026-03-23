@@ -47,7 +47,7 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
-  <p class="version">v1.05</p>
+  <p class="version">v1.06</p>
 </div>
 
 <div class="card token-section">
@@ -244,12 +244,12 @@ async function submitForm() {
 
     if (!productId || !qty || qty < 1) { valid = false; return; }
 
-    const fields = {
-      'Client': [{ id: clientId }],
-      'Product': [{ id: productId }],
-      'Txn type': txnType,
-      'Quantity': qty
-    };
+const fields = {
+  'Client': [{ id: clientId }],
+  'Product': [{ id: productId }],
+  'Txn type': { name: txnType },
+  'Quantity': qty
+};
 
     if (txnType === 'Invoiced' && invoiceNum) {
       fields['Invoice number'] = invoiceNum;
