@@ -48,7 +48,7 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
-  <p class="version">v1.5</p>
+  <p class="version">v1.6</p>
 </div>
 
 <div class="card">
@@ -124,6 +124,8 @@
 <script>
 const BASE_ID = 'appKSv3xAO9AHTN6g';
 const TXN_TABLE_ID = 'tblrPpiv1u5B8Ag3c';
+const AUDIT_TABLE = 'Audit%20Trail';
+const SYSTEM = 'Trade Stock Sys';
 
 let clients = [];
 let products = [];
@@ -159,6 +161,21 @@ async function apiCall(url, options = {}) {
     throw new Error(err.error?.message || 'Airtable API error');
   }
   return res.json();
+}
+
+async function writeAudit(status, notes, clientId) {
+  const fields = {
+    'System': SYSTEM,
+    'Status': status,
+    'Notes': notes
+  };
+  if (clientId) {
+    fields['Client'] = [clientId];
+  }
+  await apiCall('https://api.airtable.com/v0/' + BASE_ID + '/' + AUDIT_TABLE, {
+    method: 'POST',
+    body: JSON.stringify({ records: [{ fields }] })
+  });
 }
 
 async function loadData() {
@@ -253,6 +270,9 @@ async function submitForm() {
 
   const clientId = document.getElementById('clientSelect').value;
   const txnType = document.getElementById('txnType').value;
+  const staffName = document.getElementById('staffName').value.trim() || 'Unknown';
+  const reason = document.getElementById('reasonForMovement').value.trim() || 'No reason given';
+  const clientName = document.getElementById('clientSelect').options[document.getElementById('clientSelect').selectedIndex].text;
 
   if (!clientId) { showStatus('error', 'Please select a client.'); return; }
   if (!txnType) { showStatus('error', 'Please select a transaction type.'); return; }
@@ -295,44 +315,26 @@ async function submitForm() {
   try {
     for (let i = 0; i < records.length; i += 10) {
       const batch = records.slice(i, i + 10);
-      const body = JSON.stringify({ records: batch });
       await apiCall(
         'https://api.airtable.com/v0/' + BASE_ID + '/' + TXN_TABLE_ID,
-        { method: 'POST', body: body }
+        { method: 'POST', body: JSON.stringify({ records: batch }) }
       );
     }
+
+    const auditNote = staffName + ' created ' + txnType + ' stock movement for ' + clientName + ' (' + records.length + ' product(s)) — ' + reason;
+    await writeAudit('Success', auditNote, clientId);
+
     showStatus('success', '✓ ' + records.length + ' transaction(s) created successfully.');
-
-    // Write audit log entry
-    const staffName = document.getElementById('staffName').value.trim() || 'Unknown';
-    const reason = document.getElementById('reasonForMovement').value.trim() || 'No reason given';
-    const clientName = document.getElementById('clientSelect').options[document.getElementById('clientSelect').selectedIndex].text;
-    const auditNote = staffName + ' created ' + txnType + ' stock movement for ' + clientName + ' — ' + reason;
-    await apiCall(
-      'https://api.airtable.com/v0/' + BASE_ID + '/Audit%20Trail',
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          records: [{
-            fields: {
-              'System': 'Trade Stock Sys',
-              'Status': 'Success',
-              'Notes': auditNote,
-              'Client': [clientId]
-            }
-          }]
-        })
-      }
-    );
-
     document.getElementById('productRows').innerHTML = '';
     document.getElementById('clientSelect').value = '';
     document.getElementById('txnType').value = '';
     document.getElementById('staffName').value = '';
     document.getElementById('reasonForMovement').value = '';
     addRow();
+
   } catch(e) {
-    showStatus('error', 'Error: ' + e.message + ' | Payload: ' + JSON.stringify({ records: records }));
+    await writeAudit('Error', 'Submit failed for ' + clientName + ' — ' + e.message, clientId).catch(() => {});
+    showStatus('error', 'Error: ' + e.message);
   } finally {
     btn.disabled = false;
   }
