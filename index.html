@@ -46,7 +46,7 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
-  <p class="version">v1.10</p>
+  <p class="version">v1.11</p>
 </div>
 
 <div class="card">
@@ -115,14 +115,18 @@ function getToken() {
 async function airtableFetch(endpoint, options = {}) {
   const token = getToken();
   if (!token) throw new Error('Please enter your API token first.');
-  const res = await fetch('https://api.airtable.com/v0/' + BASE_ID + '/' + endpoint, {
-    ...options,
+  const url = 'https://api.airtable.com/v0/' + BASE_ID + '/' + endpoint;
+  const fetchOptions = {
+    method: options.method || 'GET',
     headers: {
       'Authorization': 'Bearer ' + token,
-      'Content-Type': 'application/json',
-      ...(options.headers || {})
+      'Content-Type': 'application/json'
     }
-  });
+  };
+  if (options.body) {
+    fetchOptions.body = options.body;
+  }
+  const res = await fetch(url, fetchOptions);
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.error?.message || 'Airtable API error');
