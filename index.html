@@ -10,6 +10,7 @@
   .card { background: #fff; border-radius: 10px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
   h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; color: #111; }
   .subtitle { color: #888; font-size: 13px; margin-bottom: 0; }
+  .version { font-size: 11px; color: #ccc; text-align: right; margin-top: 8px; }
   label { display: block; font-weight: 500; margin-bottom: 6px; font-size: 13px; color: #555; }
   select, input[type="text"], input[type="number"], input[type="password"] {
     width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px;
@@ -39,7 +40,6 @@
   .invoice-col.visible { display: table-cell; }
   .qty-col { width: 90px; }
   .remove-col { width: 40px; }
- .version { font-size: 11px; color: #ccc; text-align: right; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -47,7 +47,7 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
- <p class="version">v1.03</p>
+  <p class="version">v1.04</p>
 </div>
 
 <div class="card token-section">
@@ -133,14 +133,14 @@ async function airtableFetch(endpoint, options = {}) {
 
 async function loadClients() {
   try {
-    const data = await airtableFetch(encodeURIComponent(TABLES.tradeClients) + '?fields%5B%5D=Name&sort%5B0%5D%5Bfield%5D=Name');
+    const data = await airtableFetch(encodeURIComponent(TABLES.tradeClients) + '?fields%5B%5D=Trade%20Account&sort%5B0%5D%5Bfield%5D=Trade%20Account');
     clients = data.records;
     const sel = document.getElementById('clientSelect');
     sel.innerHTML = '<option value="">— Select client —</option>';
     clients.forEach(c => {
       const opt = document.createElement('option');
       opt.value = c.id;
-      opt.textContent = c.fields.Name;
+      opt.textContent = c.fields['Trade Account'];
       sel.appendChild(opt);
     });
   } catch(e) {
@@ -153,7 +153,7 @@ async function loadProducts() {
     let allRecords = [];
     let offset = null;
     do {
-      let url = encodeURIComponent(TABLES.products) 
+      let url = encodeURIComponent(TABLES.products)
         + '?fields%5B%5D=SKU&fields%5B%5D=Name'
         + '&filterByFormula=' + encodeURIComponent("FIND('Direct Trade', ARRAYJOIN({Sales Channels}))>0")
         + '&sort%5B0%5D%5Bfield%5D=SKU';
@@ -237,7 +237,7 @@ async function submitForm() {
   const records = [];
   let valid = true;
 
-  rows.forEach((row, i) => {
+  rows.forEach((row) => {
     const productId = row.querySelector('.product-select').value;
     const qty = parseInt(row.querySelector('.qty-input').value);
     const invoiceNum = row.querySelector('.invoice-input')?.value?.trim() || '';
@@ -265,7 +265,6 @@ async function submitForm() {
   showStatus('loading', 'Submitting ' + records.length + ' record(s)...');
 
   try {
-    // Airtable batch create allows max 10 records at a time
     for (let i = 0; i < records.length; i += 10) {
       const batch = records.slice(i, i + 10);
       await airtableFetch(encodeURIComponent(TABLES.tradeTransactions), {
@@ -277,6 +276,7 @@ async function submitForm() {
     document.getElementById('productRows').innerHTML = '';
     document.getElementById('clientSelect').value = '';
     document.getElementById('txnType').value = '';
+    addRow();
   } catch(e) {
     showStatus('error', 'Error: ' + e.message);
   } finally {
@@ -288,6 +288,7 @@ document.getElementById('apiToken').addEventListener('change', () => {
   loadClients();
   loadProducts();
 });
+
 document.getElementById('apiToken').addEventListener('input', () => {
   if (document.getElementById('apiToken').value.length > 20) {
     loadClients();
@@ -295,7 +296,6 @@ document.getElementById('apiToken').addEventListener('input', () => {
   }
 });
 
-// Add first row on load
 addRow();
 </script>
 </body>
