@@ -151,7 +151,10 @@ async function loadProducts() {
     let allRecords = [];
     let offset = null;
     do {
-      let url = encodeURIComponent(TABLES.products) + '?fields%5B%5D=SKU&fields%5B%5D=Name&filterByFormula=' + encodeURIComponent("FIND('Trade', {Sales Channel})>0") + '&sort%5B0%5D%5Bfield%5D=SKU';
+      let url = encodeURIComponent(TABLES.products) 
+        + '?fields%5B%5D=SKU&fields%5B%5D=Name'
+        + '&filterByFormula=' + encodeURIComponent("FIND('Direct Trade', ARRAYJOIN({Sales Channels}))>0")
+        + '&sort%5B0%5D%5Bfield%5D=SKU';
       if (offset) url += '&offset=' + offset;
       const data = await airtableFetch(url);
       allRecords = allRecords.concat(data.records);
