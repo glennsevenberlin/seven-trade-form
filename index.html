@@ -46,7 +46,7 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
-  <p class="version">v1.09</p>
+  <p class="version">v1.10</p>
 </div>
 
 <div class="card">
@@ -270,7 +270,7 @@ async function submitForm() {
     for (let i = 0; i < records.length; i += 10) {
       const batch = records.slice(i, i + 10);
       const payload = JSON.stringify({ records: batch });
-      await airtableFetch(encodeURIComponent(TABLES.tradeTransactions), {
+      await airtableFetch('tblrPpiv1u5B8Ag3c', {
         method: 'POST',
         body: payload
       });
