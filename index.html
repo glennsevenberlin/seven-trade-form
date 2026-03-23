@@ -31,11 +31,10 @@
   .btn-submit { background: #7c3aed; color: #fff; border: none; border-radius: 8px; padding: 12px 32px; font-size: 15px; font-weight: 600; cursor: pointer; width: 100%; transition: background 0.15s; }
   .btn-submit:hover:not(:disabled) { background: #6d28d9; }
   .btn-submit:disabled { background: #bbb; cursor: not-allowed; }
-  .status { padding: 12px 16px; border-radius: 8px; font-size: 14px; margin-top: 12px; display: none; }
+  .status { padding: 12px 16px; border-radius: 8px; font-size: 14px; margin-top: 12px; display: none; word-break: break-all; }
   .status.success { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; display: block; }
   .status.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; display: block; }
   .status.loading { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; display: block; }
-  .token-section { margin-bottom: 16px; }
   .invoice-col { display: none; }
   .invoice-col.visible { display: table-cell; }
   .qty-col { width: 90px; }
@@ -47,10 +46,10 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
-  <p class="version">v1.08</p>
+  <p class="version">v1.09</p>
 </div>
 
-<div class="card token-section">
+<div class="card">
   <div class="form-group">
     <label>Airtable API Token</label>
     <input type="password" id="apiToken" placeholder="Paste your personal access token here">
@@ -154,15 +153,18 @@ async function loadProducts() {
     let offset = null;
     do {
       let url = encodeURIComponent(TABLES.products)
-        + '?fields%5B%5D=SKU&fields%5B%5D=Name'
-        + '&filterByFormula=' + encodeURIComponent("FIND('Direct Trade', ARRAYJOIN({Sales Channels}))>0")
+        + '?fields%5B%5D=SKU&fields%5B%5D=Name&fields%5B%5D=Sales%20Channels'
         + '&sort%5B0%5D%5Bfield%5D=SKU';
       if (offset) url += '&offset=' + offset;
       const data = await airtableFetch(url);
       allRecords = allRecords.concat(data.records);
       offset = data.offset;
     } while (offset);
-    products = allRecords;
+    products = allRecords.filter(p => {
+      const channels = p.fields['Sales Channels'];
+      if (!channels) return false;
+      return channels.includes('Direct Trade');
+    });
     refreshProductDropdowns();
   } catch(e) {
     showStatus('error', 'Could not load products: ' + e.message);
@@ -240,18 +242,19 @@ async function submitForm() {
   rows.forEach((row) => {
     const productId = row.querySelector('.product-select').value;
     const qty = parseInt(row.querySelector('.qty-input').value);
-    const invoiceNum = row.querySelector('.invoice-input')?.value?.trim() || '';
+    const invoiceInput = row.querySelector('.invoice-input');
+    const invoiceNum = invoiceInput ? invoiceInput.value.trim() : '';
 
     if (!productId || !qty || qty < 1) { valid = false; return; }
 
-const fields = {
-  'Client': [{ id: clientId }],
-  'Product': [{ id: productId }],
-  'Txn type': txnType,  'Quantity': qty
-};
+    const fields = {};
+    fields['Client'] = [{ id: String(clientId) }];
+    fields['Product'] = [{ id: String(productId) }];
+    fields['Txn type'] = String(txnType);
+    fields['Quantity'] = parseInt(qty);
 
     if (txnType === 'Invoiced' && invoiceNum) {
-      fields['Invoice number'] = invoiceNum;
+      fields['Invoice number'] = String(invoiceNum);
     }
 
     records.push({ fields });
@@ -266,9 +269,10 @@ const fields = {
   try {
     for (let i = 0; i < records.length; i += 10) {
       const batch = records.slice(i, i + 10);
+      const payload = JSON.stringify({ records: batch });
       await airtableFetch(encodeURIComponent(TABLES.tradeTransactions), {
         method: 'POST',
-        body: JSON.stringify({ records: batch })
+        body: payload
       });
     }
     showStatus('success', '✓ ' + records.length + ' transaction(s) created successfully.');
@@ -276,10 +280,9 @@ const fields = {
     document.getElementById('clientSelect').value = '';
     document.getElementById('txnType').value = '';
     addRow();
-} catch(e) {
-    const clientId = document.getElementById('clientSelect').value;
-    const firstProduct = document.querySelector('.product-select').value;
-    showStatus('error', 'Error: ' + e.message + ' | clientId: ' + clientId + ' | productId: ' + firstProduct);
+  } catch(e) {
+    const payload = JSON.stringify({ records: records });
+    showStatus('error', 'Error: ' + e.message + ' | Payload: ' + payload);
   } finally {
     btn.disabled = false;
   }
