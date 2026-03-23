@@ -48,7 +48,7 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
-  <p class="version">v1.3-test</p>
+  <p class="version">v1.3</p>
 </div>
 
 <div class="card">
@@ -229,27 +229,68 @@ function handleTxnTypeChange() {
 
 async function submitForm() {
   const token = getToken();
-  showStatus('loading', 'Testing minimal API call...');
+  if (!token) { showStatus('error', 'Please enter your API token.'); return; }
 
-  const body = JSON.stringify({
-    records: [{
-      fields: {
-        'Quantity': 99
-      }
-    }]
+  const clientId = document.getElementById('clientSelect').value;
+  const txnType = document.getElementById('txnType').value;
+
+  if (!clientId) { showStatus('error', 'Please select a client.'); return; }
+  if (!txnType) { showStatus('error', 'Please select a transaction type.'); return; }
+
+  const rows = document.querySelectorAll('#productRows tr');
+  if (rows.length === 0) { showStatus('error', 'Please add at least one product.'); return; }
+
+  const records = [];
+  let valid = true;
+
+  rows.forEach((row) => {
+    const productSel = row.querySelector('.product-select');
+    const productId = productSel.value;
+    const qty = parseInt(row.querySelector('.qty-input').value);
+    const invoiceInput = row.querySelector('.invoice-input');
+    const invoiceNum = invoiceInput ? invoiceInput.value.trim() : '';
+
+    if (!productId || !qty || qty < 1) { valid = false; return; }
+
+    const fields = {
+      'Client': [clientId],
+      'Product': [productId],
+      'Txn type': txnType,
+      'Quantity': qty
+    };
+
+    if (txnType === 'Invoiced' && invoiceNum) {
+      fields['Invoice number'] = invoiceNum;
+    }
+
+    records.push({ fields });
   });
 
-  const res = await fetch('https://api.airtable.com/v0/' + BASE_ID + '/' + TXN_TABLE_ID, {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Bearer ' + token,
-      'Content-Type': 'application/json'
-    },
-    body: body
-  });
+  if (!valid) { showStatus('error', 'Please make sure all rows have a product and a valid quantity.'); return; }
 
-  const data = await res.json();
-  showStatus(res.ok ? 'success' : 'error', 'Status: ' + res.status + ' | Response: ' + JSON.stringify(data));
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  showStatus('loading', 'Submitting ' + records.length + ' record(s)...');
+
+  try {
+    for (let i = 0; i < records.length; i += 10) {
+      const batch = records.slice(i, i + 10);
+      const body = JSON.stringify({ records: batch });
+      await apiCall(
+        'https://api.airtable.com/v0/' + BASE_ID + '/' + TXN_TABLE_ID,
+        { method: 'POST', body: body }
+      );
+    }
+    showStatus('success', '✓ ' + records.length + ' transaction(s) created successfully.');
+    document.getElementById('productRows').innerHTML = '';
+    document.getElementById('clientSelect').value = '';
+    document.getElementById('txnType').value = '';
+    addRow();
+  } catch(e) {
+    showStatus('error', 'Error: ' + e.message + ' | Payload: ' + JSON.stringify({ records: records }));
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 addRow();
