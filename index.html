@@ -39,6 +39,8 @@
   .invoice-col.visible { display: table-cell; }
   .qty-col { width: 90px; }
   .remove-col { width: 40px; }
+  .load-btn { background: #7c3aed; color: #fff; border: none; border-radius: 6px; padding: 8px 20px; font-size: 14px; font-weight: 500; cursor: pointer; margin-top: 10px; }
+  .load-btn:hover { background: #6d28d9; }
 </style>
 </head>
 <body>
@@ -46,7 +48,7 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
-  <p class="version">v1.11</p>
+  <p class="version">v1.2</p>
 </div>
 
 <div class="card">
@@ -54,6 +56,8 @@
     <label>Airtable API Token</label>
     <input type="password" id="apiToken" placeholder="Paste your personal access token here">
   </div>
+  <button class="load-btn" onclick="loadData()">Load data</button>
+  <div class="status" id="loadStatus"></div>
 </div>
 
 <div class="card">
@@ -99,11 +103,7 @@
 
 <script>
 const BASE_ID = 'appKSv3xAO9AHTN6g';
-const TABLES = {
-  tradeTransactions: 'Trade Transactions',
-  tradeClients: 'Trade Clients',
-  products: 'Products'
-};
+const TXN_TABLE_ID = 'tblrPpiv1u5B8Ag3c';
 
 let clients = [];
 let products = [];
@@ -112,21 +112,28 @@ function getToken() {
   return document.getElementById('apiToken').value.trim();
 }
 
-async function airtableFetch(endpoint, options = {}) {
+function showLoadStatus(type, msg) {
+  const el = document.getElementById('loadStatus');
+  el.className = 'status ' + type;
+  el.textContent = msg;
+}
+
+function showStatus(type, msg) {
+  const el = document.getElementById('statusMsg');
+  el.className = 'status ' + type;
+  el.textContent = msg;
+}
+
+async function apiCall(url, options = {}) {
   const token = getToken();
-  if (!token) throw new Error('Please enter your API token first.');
-  const url = 'https://api.airtable.com/v0/' + BASE_ID + '/' + endpoint;
-  const fetchOptions = {
+  const res = await fetch(url, {
     method: options.method || 'GET',
     headers: {
       'Authorization': 'Bearer ' + token,
       'Content-Type': 'application/json'
-    }
-  };
-  if (options.body) {
-    fetchOptions.body = options.body;
-  }
-  const res = await fetch(url, fetchOptions);
+    },
+    body: options.body || undefined
+  });
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.error?.message || 'Airtable API error');
@@ -134,10 +141,18 @@ async function airtableFetch(endpoint, options = {}) {
   return res.json();
 }
 
-async function loadClients() {
+async function loadData() {
+  const token = getToken();
+  if (!token) { showLoadStatus('error', 'Please paste your API token first.'); return; }
+
+  showLoadStatus('loading', 'Loading clients and products...');
+
   try {
-    const data = await airtableFetch(encodeURIComponent(TABLES.tradeClients) + '?fields%5B%5D=Trade%20Account&sort%5B0%5D%5Bfield%5D=Trade%20Account');
-    clients = data.records;
+    // Load clients
+    const clientData = await apiCall(
+      'https://api.airtable.com/v0/' + BASE_ID + '/Trade%20Clients?fields[]=Trade%20Account&sort[0][field]=Trade%20Account'
+    );
+    clients = clientData.records;
     const sel = document.getElementById('clientSelect');
     sel.innerHTML = '<option value="">— Select client —</option>';
     clients.forEach(c => {
@@ -146,32 +161,29 @@ async function loadClients() {
       opt.textContent = c.fields['Trade Account'];
       sel.appendChild(opt);
     });
-  } catch(e) {
-    showStatus('error', 'Could not load clients: ' + e.message);
-  }
-}
 
-async function loadProducts() {
-  try {
-    let allRecords = [];
+    // Load products (all pages)
+    let allProducts = [];
     let offset = null;
     do {
-      let url = encodeURIComponent(TABLES.products)
-        + '?fields%5B%5D=SKU&fields%5B%5D=Name&fields%5B%5D=Sales%20Channels'
-        + '&sort%5B0%5D%5Bfield%5D=SKU';
+      let url = 'https://api.airtable.com/v0/' + BASE_ID + '/Products?fields[]=SKU&fields[]=Name&fields[]=Sales%20Channels&sort[0][field]=SKU';
       if (offset) url += '&offset=' + offset;
-      const data = await airtableFetch(url);
-      allRecords = allRecords.concat(data.records);
+      const data = await apiCall(url);
+      allProducts = allProducts.concat(data.records);
       offset = data.offset;
     } while (offset);
-    products = allRecords.filter(p => {
-      const channels = p.fields['Sales Channels'];
-      if (!channels) return false;
-      return channels.includes('Direct Trade');
+
+    products = allProducts.filter(p => {
+      const ch = p.fields['Sales Channels'];
+      if (!ch) return false;
+      return Array.isArray(ch) ? ch.includes('Direct Trade') : ch === 'Direct Trade';
     });
+
     refreshProductDropdowns();
+    showLoadStatus('success', '✓ Loaded ' + clients.length + ' clients and ' + products.length + ' products.');
+
   } catch(e) {
-    showStatus('error', 'Could not load products: ' + e.message);
+    showLoadStatus('error', 'Error loading data: ' + e.message);
   }
 }
 
@@ -195,11 +207,7 @@ function addRow() {
   const showInvoice = txnType === 'Invoiced';
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td>
-      <select class="product-select">
-        <option value="">— Select product —</option>
-      </select>
-    </td>
+    <td><select class="product-select"><option value="">— Select product —</option></select></td>
     <td class="qty-col"><input type="number" class="qty-input" min="1" placeholder="0"></td>
     <td class="invoice-col${showInvoice ? ' visible' : ''}"><input type="text" class="invoice-input" placeholder="Invoice #"></td>
     <td class="remove-col"><button class="btn-remove" onclick="removeRow(this)">×</button></td>
@@ -221,12 +229,6 @@ function handleTxnTypeChange() {
   });
 }
 
-function showStatus(type, msg) {
-  const el = document.getElementById('statusMsg');
-  el.className = 'status ' + type;
-  el.textContent = msg;
-}
-
 async function submitForm() {
   const token = getToken();
   if (!token) { showStatus('error', 'Please enter your API token.'); return; }
@@ -244,21 +246,23 @@ async function submitForm() {
   let valid = true;
 
   rows.forEach((row) => {
-    const productId = row.querySelector('.product-select').value;
+    const productSel = row.querySelector('.product-select');
+    const productId = productSel.value;
     const qty = parseInt(row.querySelector('.qty-input').value);
     const invoiceInput = row.querySelector('.invoice-input');
     const invoiceNum = invoiceInput ? invoiceInput.value.trim() : '';
 
     if (!productId || !qty || qty < 1) { valid = false; return; }
 
-    const fields = {};
-    fields['Client'] = [{ id: String(clientId) }];
-    fields['Product'] = [{ id: String(productId) }];
-    fields['Txn type'] = String(txnType);
-    fields['Quantity'] = parseInt(qty);
+    const fields = {
+      'Client': [{ id: clientId }],
+      'Product': [{ id: productId }],
+      'Txn type': txnType,
+      'Quantity': qty
+    };
 
     if (txnType === 'Invoiced' && invoiceNum) {
-      fields['Invoice number'] = String(invoiceNum);
+      fields['Invoice number'] = invoiceNum;
     }
 
     records.push({ fields });
@@ -273,11 +277,11 @@ async function submitForm() {
   try {
     for (let i = 0; i < records.length; i += 10) {
       const batch = records.slice(i, i + 10);
-      const payload = JSON.stringify({ records: batch });
-      await airtableFetch('tblrPpiv1u5B8Ag3c', {
-        method: 'POST',
-        body: payload
-      });
+      const body = JSON.stringify({ records: batch });
+      const result = await apiCall(
+        'https://api.airtable.com/v0/' + BASE_ID + '/' + TXN_TABLE_ID,
+        { method: 'POST', body: body }
+      );
     }
     showStatus('success', '✓ ' + records.length + ' transaction(s) created successfully.');
     document.getElementById('productRows').innerHTML = '';
@@ -285,24 +289,11 @@ async function submitForm() {
     document.getElementById('txnType').value = '';
     addRow();
   } catch(e) {
-    const payload = JSON.stringify({ records: records });
-    showStatus('error', 'Error: ' + e.message + ' | Payload: ' + payload);
+    showStatus('error', 'Error: ' + e.message + ' | Payload: ' + JSON.stringify({ records: records }));
   } finally {
     btn.disabled = false;
   }
 }
-
-document.getElementById('apiToken').addEventListener('change', () => {
-  loadClients();
-  loadProducts();
-});
-
-document.getElementById('apiToken').addEventListener('input', () => {
-  if (document.getElementById('apiToken').value.length > 20) {
-    loadClients();
-    loadProducts();
-  }
-});
 
 addRow();
 </script>
