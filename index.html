@@ -48,7 +48,7 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
-  <p class="version">v1.4</p>
+  <p class="version">v1.5</p>
 </div>
 
 <div class="card">
@@ -64,7 +64,14 @@
   <div class="row">
     <div class="form-group">
       <label>Staff name</label>
-      <input type="text" id="staffName" placeholder="Your name">
+      <select id="staffName">
+        <option value="">— Select staff —</option>
+        <option value="Philippe">Philippe</option>
+        <option value="Jonny">Jonny</option>
+        <option value="Glenn">Glenn</option>
+        <option value="CRYME">CRYME</option>
+        <option value="Rachel">Rachel</option>
+      </select>
     </div>
     <div class="form-group">
       <label>Reason for movement</label>
@@ -310,7 +317,8 @@ async function submitForm() {
             fields: {
               'System': 'Trade Stock Sys',
               'Status': 'Success',
-              'Notes': auditNote
+              'Notes': auditNote,
+              'Client': [clientId]
             }
           }]
         })
