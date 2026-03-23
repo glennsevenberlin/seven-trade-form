@@ -48,7 +48,7 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
-  <p class="version">v1.3</p>
+  <p class="version">v1.4</p>
 </div>
 
 <div class="card">
@@ -58,6 +58,19 @@
   </div>
   <button class="load-btn" onclick="loadData()">Load data</button>
   <div class="status" id="loadStatus"></div>
+</div>
+
+<div class="card">
+  <div class="row">
+    <div class="form-group">
+      <label>Staff name</label>
+      <input type="text" id="staffName" placeholder="Your name">
+    </div>
+    <div class="form-group">
+      <label>Reason for movement</label>
+      <input type="text" id="reasonForMovement" placeholder="e.g. New consignment, quarterly update">
+    </div>
+  </div>
 </div>
 
 <div class="card">
@@ -282,9 +295,33 @@ async function submitForm() {
       );
     }
     showStatus('success', '✓ ' + records.length + ' transaction(s) created successfully.');
+
+    // Write audit log entry
+    const staffName = document.getElementById('staffName').value.trim() || 'Unknown';
+    const reason = document.getElementById('reasonForMovement').value.trim() || 'No reason given';
+    const clientName = document.getElementById('clientSelect').options[document.getElementById('clientSelect').selectedIndex].text;
+    const auditNote = staffName + ' created ' + txnType + ' stock movement for ' + clientName + ' — ' + reason;
+    await apiCall(
+      'https://api.airtable.com/v0/' + BASE_ID + '/Audit%20Trail',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          records: [{
+            fields: {
+              'System': 'Trade Stock Sys',
+              'Status': 'Success',
+              'Notes': auditNote
+            }
+          }]
+        })
+      }
+    );
+
     document.getElementById('productRows').innerHTML = '';
     document.getElementById('clientSelect').value = '';
     document.getElementById('txnType').value = '';
+    document.getElementById('staffName').value = '';
+    document.getElementById('reasonForMovement').value = '';
     addRow();
   } catch(e) {
     showStatus('error', 'Error: ' + e.message + ' | Payload: ' + JSON.stringify({ records: records }));
