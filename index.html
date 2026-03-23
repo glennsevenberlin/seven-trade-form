@@ -277,8 +277,10 @@ const fields = {
     document.getElementById('clientSelect').value = '';
     document.getElementById('txnType').value = '';
     addRow();
-  } catch(e) {
-    showStatus('error', 'Error: ' + e.message);
+} catch(e) {
+    const clientId = document.getElementById('clientSelect').value;
+    const firstProduct = document.querySelector('.product-select').value;
+    showStatus('error', 'Error: ' + e.message + ' | clientId: ' + clientId + ' | productId: ' + firstProduct);
   } finally {
     btn.disabled = false;
   }
