@@ -279,10 +279,15 @@ async function submitForm() {
   }
 }
 
-// Load data when token is entered
 document.getElementById('apiToken').addEventListener('change', () => {
   loadClients();
   loadProducts();
+});
+document.getElementById('apiToken').addEventListener('input', () => {
+  if (document.getElementById('apiToken').value.length > 20) {
+    loadClients();
+    loadProducts();
+  }
 });
 
 // Add first row on load
