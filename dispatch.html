@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SEVEN — ShipStation Dispatch</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; font-size: 15px; }
+
+  .top-bar { background: #fff; border-bottom: 1px solid #e0e0e0; padding: 18px 32px; display: flex; align-items: baseline; gap: 16px; }
+  .top-bar h1 { font-size: 20px; font-weight: 700; }
+  .top-bar p  { font-size: 13px; color: #888; }
+  .version    { margin-left: auto; font-size: 12px; color: #bbb; }
+  .nav-link { font-size: 13px; color: #7c3aed; text-decoration: none; font-weight: 600; }
+  .nav-link:hover { text-decoration: underline; }
+
+  .section { background: #fff; border-top: 3px solid #f0f0f0; padding: 28px 32px; }
+
+  label { display: block; font-size: 13px; font-weight: 600; color: #555; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+
+  input[type=text], input[type=password], select {
+    width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 6px;
+    font-size: 15px; background: #fff; appearance: none; outline: none;
+  }
+  input:focus, select:focus { border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,0.1); }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+  .btn {
+    display: inline-block; padding: 11px 24px; border: none; border-radius: 6px;
+    font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.15s;
+  }
+  .btn-primary   { background: #7c3aed; color: #fff; }
+  .btn-primary:hover { background: #6d28d9; }
+  .btn-primary:disabled { background: #c4b5fd; cursor: not-allowed; }
+  .btn-secondary { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
+  .btn-secondary:hover { background: #e5e7eb; }
+  .btn-danger    { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+  .btn-danger:hover { background: #fecaca; }
+
+  /* Transaction list */
+  .txn-header { display: grid; grid-template-columns: 36px 1fr 120px 80px; gap: 12px; padding: 8px 12px; font-size: 12px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e5e7eb; }
+  .txn-row    { display: grid; grid-template-columns: 36px 1fr 120px 80px; gap: 12px; padding: 10px 12px; border-bottom: 1px solid #f3f4f6; align-items: center; transition: background 0.1s; }
+  .txn-row:hover { background: #faf5ff; }
+  .txn-row.checked { background: #f5f3ff; }
+  .txn-row input[type=checkbox] { width: 18px; height: 18px; accent-color: #7c3aed; cursor: pointer; }
+  .txn-id   { font-size: 12px; color: #9ca3af; }
+  .txn-prod { font-weight: 600; font-size: 14px; }
+  .txn-qty  { font-size: 14px; color: #374151; text-align: right; }
+
+  /* Summary box */
+  .summary-box { background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 8px; padding: 16px 20px; margin-top: 20px; }
+  .summary-box h3 { font-size: 14px; font-weight: 700; color: #5b21b6; margin-bottom: 8px; }
+  .summary-line { font-size: 13px; color: #6b7280; padding: 2px 0; }
+
+  /* Status messages */
+  .msg { padding: 14px 18px; border-radius: 8px; font-size: 14px; margin-top: 16px; }
+  .msg-info    { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+  .msg-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+  .msg-error   { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+  .msg-warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+
+  .empty { color: #9ca3af; font-size: 14px; padding: 20px 0; }
+
+  .actions { display: flex; gap: 12px; align-items: center; margin-top: 20px; flex-wrap: wrap; }
+  .sel-btns { display: flex; gap: 8px; }
+
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #loading-section { display: none; }
+  #dispatch-section { display: none; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>ShipStation Dispatch</h1>
+  <p>Create ShipStation orders for trade client shipments</p>
+  <span class="version">v1.0</span>
+  <a class="nav-link" href="index.html">← Trade Stock Movement</a>
+</div>
+
+<!-- TOKEN SECTION -->
+<div class="section" id="token-section">
+  <label for="pat">Airtable API Token</label>
+  <input type="password" id="pat" placeholder="paste your token here" autocomplete="current-password" style="margin-bottom:16px;">
+  <button class="btn btn-primary" onclick="loadData()">Load data</button>
+  <div id="token-msg"></div>
+</div>
+
+<!-- LOADING -->
+<div class="section" id="loading-section">
+  <p style="color:#888;">Loading clients and transactions…</p>
+</div>
+
+<!-- DISPATCH SECTION -->
+<div id="dispatch-section">
+
+  <!-- Client selector -->
+  <div class="section">
+    <div class="row2">
+      <div>
+        <label for="client-select">Client</label>
+        <select id="client-select" onchange="onClientChange()">
+          <option value="">— Select a client —</option>
+        </select>
+      </div>
+      <div>
+        <label>Staff name</label>
+        <select id="staff-select">
+          <option value="">— Select staff —</option>
+          <option>Philippe</option>
+          <option>Jonny</option>
+          <option>Glenn</option>
+          <option>CRYME</option>
+          <option>Rachel</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Transaction list -->
+  <div class="section" id="txn-section" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+      <label style="margin:0;" id="txn-count-label">Shippable lines</label>
+      <div class="sel-btns">
+        <button class="btn btn-secondary" style="padding:6px 14px;font-size:13px;" onclick="toggleAll(true)">Select all</button>
+        <button class="btn btn-secondary" style="padding:6px 14px;font-size:13px;" onclick="toggleAll(false)">Clear</button>
+      </div>
+    </div>
+
+    <div class="txn-header">
+      <div></div>
+      <div>Product</div>
+      <div>Txn #</div>
+      <div style="text-align:right;">Qty</div>
+    </div>
+    <div id="txn-list"></div>
+
+    <!-- Summary -->
+    <div class="summary-box" id="summary-box" style="display:none;">
+      <h3 id="summary-title"></h3>
+      <div id="summary-lines"></div>
+    </div>
+
+    <!-- Address warning -->
+    <div id="addr-warning"></div>
+
+    <!-- Submit -->
+    <div class="actions">
+      <button class="btn btn-primary" id="submit-btn" onclick="submitOrder()" disabled>
+        Create ShipStation Order →
+      </button>
+      <span id="submit-status"></span>
+    </div>
+
+    <div id="result-msg"></div>
+  </div>
+
+</div>
+
+<script>
+// ─── Config ─────────────────────────────────────────────────────────────────
+const BASE        = 'appKSv3xAO9AHTN6g';
+const T_TXN       = 'tblrPpiv1u5B8Ag3c';
+const T_CLIENTS   = 'tblHjBtbDzsePZZkT';
+const T_PRODUCTS  = 'tblvy0yjEIpAS81Hg';
+const T_SS_ORDERS = 'tblweadQ9tC2y9rje';
+const T_SS_LINES  = 'tblcODiiIH6DLAdsG';
+const T_AUDIT     = 'tblAuditTrailID';   // set below after fetch
+
+let PAT = '';
+let allClients  = [];
+let allProducts = {};   // id → fields
+let allTxns     = [];   // shippable txns
+let auditTableId = null;
+
+// ─── Airtable helpers ────────────────────────────────────────────────────────
+async function atGet(tableId, params = {}) {
+  let url = `https://api.airtable.com/v0/${BASE}/${tableId}`;
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (Array.isArray(v)) v.forEach(i => q.append(k, i));
+    else q.set(k, v);
+  }
+  const qs = q.toString();
+  if (qs) url += '?' + qs;
+  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + PAT } });
+  if (!r.ok) throw new Error(`Airtable GET ${tableId} HTTP ${r.status}`);
+  return r.json();
+}
+
+async function atGetAll(tableId, params = {}) {
+  let records = [], offset = null;
+  do {
+    const p = { ...params };
+    if (offset) p.offset = offset;
+    const d = await atGet(tableId, p);
+    records = records.concat(d.records);
+    offset = d.offset || null;
+  } while (offset);
+  return records;
+}
+
+async function atPost(tableId, fields) {
+  const r = await fetch(`https://api.airtable.com/v0/${BASE}/${tableId}`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + PAT, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields })
+  });
+  if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message || `HTTP ${r.status}`); }
+  return r.json();
+}
+
+async function atPatch(tableId, id, fields) {
+  const r = await fetch(`https://api.airtable.com/v0/${BASE}/${tableId}/${id}`, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + PAT, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields })
+  });
+  if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message || `HTTP ${r.status}`); }
+  return r.json();
+}
+
+async function auditLog(status, notes, clientId = null) {
+  if (!auditTableId) return;
+  const fields = { 'System': 'ShipStation Dispatch', 'Status': status, 'Notes': notes };
+  if (clientId) fields['Client'] = [clientId];
+  try { await atPost(auditTableId, fields); } catch(e) { console.warn('Audit log failed:', e); }
+}
+
+// ─── Load data ───────────────────────────────────────────────────────────────
+async function loadData() {
+  PAT = document.getElementById('pat').value.trim();
+  if (!PAT) { showMsg('token-msg', 'error', 'Please enter your API token.'); return; }
+
+  document.getElementById('loading-section').style.display = 'block';
+  document.getElementById('dispatch-section').style.display = 'none';
+  showMsg('token-msg', 'info', 'Loading…');
+
+  try {
+    // Fetch clients
+    const clientRecs = await atGetAll(T_CLIENTS, {
+      'fields[]': ['Trade Account', 'Delivery Contact Name', 'Delivery Business / Store Name',
+                   'Address 1', 'Address 2', 'City', 'State / Region',
+                   'Postcode', 'Country', 'Delivery Contact Phone', 'Delivery Contact Email']
+    });
+    allClients = clientRecs.sort((a,b) =>
+      (a.fields['Trade Account']||'').localeCompare(b.fields['Trade Account']||''));
+
+    // Fetch products
+    const prodRecs = await atGetAll(T_PRODUCTS, {
+      'fields[]': ['SKU', 'Name', 'Weight (kg)', 'Dimensions (Length)',
+                   'Dimensions (Width)', 'Dimensions (Height)',
+                   'Commodity Code', 'Country of Origin', 'Customs Description',
+                   'Direct Trade Price (ex VAT)']
+    });
+    allProducts = {};
+    prodRecs.forEach(p => { allProducts[p.id] = p.fields; });
+
+    // Fetch shippable transactions (Shipped + not yet sent to ShipStation)
+    const txnRecs = await atGetAll(T_TXN, {
+      filterByFormula: "AND({Txn type}='Shipped',{Sent to ShipStation}=FALSE())",
+      'fields[]': ['Txn ID', 'Client', 'Product', 'Quantity', 'Sent to ShipStation']
+    });
+    allTxns = txnRecs;
+
+    // Find Audit Trail table ID from base schema
+    try {
+      const schema = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE}/tables`,
+        { headers: { Authorization: 'Bearer ' + PAT } });
+      if (schema.ok) {
+        const s = await schema.json();
+        const at = s.tables.find(t => t.name === 'Audit Trail');
+        if (at) auditTableId = at.id;
+      }
+    } catch(e) { /* audit is best-effort */ }
+
+    // Populate client dropdown
+    const sel = document.getElementById('client-select');
+    sel.innerHTML = '<option value="">— Select a client —</option>';
+    allClients.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      const acct  = c.fields['Trade Account'] || '';
+      const store = c.fields['Delivery Business / Store Name'] || '';
+      opt.textContent = acct + (store && store !== acct ? ' — ' + store : '');
+      sel.appendChild(opt);
+    });
+
+    document.getElementById('loading-section').style.display = 'none';
+    document.getElementById('dispatch-section').style.display = 'block';
+    showMsg('token-msg', 'success', `Loaded ${allClients.length} clients · ${allTxns.length} shippable transaction(s)`);
+
+  } catch(err) {
+    document.getElementById('loading-section').style.display = 'none';
+    showMsg('token-msg', 'error', 'Failed to load data: ' + err.message);
+  }
+}
+
+// ─── Client change ───────────────────────────────────────────────────────────
+function onClientChange() {
+  const clientId = document.getElementById('client-select').value;
+  document.getElementById('result-msg').innerHTML = '';
+  document.getElementById('addr-warning').innerHTML = '';
+
+  if (!clientId) {
+    document.getElementById('txn-section').style.display = 'none';
+    return;
+  }
+
+  const clientTxns = allTxns.filter(t => {
+    const c = t.fields['Client'];
+    return c && c[0] === clientId;
+  });
+
+  document.getElementById('txn-count-label').textContent =
+    `Shippable lines (${clientTxns.length})`;
+
+  const list = document.getElementById('txn-list');
+  list.innerHTML = '';
+
+  if (clientTxns.length === 0) {
+    list.innerHTML = '<p class="empty">No shippable transactions found for this client.</p>';
+    document.getElementById('summary-box').style.display = 'none';
+    document.getElementById('submit-btn').disabled = true;
+    document.getElementById('txn-section').style.display = 'block';
+    return;
+  }
+
+  clientTxns.forEach(txn => {
+    const prodId   = txn.fields['Product']?.[0];
+    const prod     = prodId ? allProducts[prodId] : null;
+    const prodName = prod?.Name || prod?.SKU || 'Unknown product';
+    const qty      = txn.fields['Quantity'] || 0;
+    const txnId    = txn.fields['Txn ID'] || txn.id;
+
+    const row = document.createElement('div');
+    row.className = 'txn-row';
+    row.dataset.id = txn.id;
+    row.innerHTML = `
+      <input type="checkbox" onchange="onCheck()">
+      <div><div class="txn-prod">${prodName}</div></div>
+      <div class="txn-id">Txn #${txnId}</div>
+      <div class="txn-qty">${qty}</div>
+    `;
+    list.appendChild(row);
+  });
+
+  // Check address
+  const client = allClients.find(c => c.id === clientId);
+  if (client) {
+    const missing = [];
+    if (!client.fields['Address 1']) missing.push('Address 1');
+    if (!client.fields['Postcode'])  missing.push('Postcode');
+    if (!client.fields['Country'])   missing.push('Country');
+    if (missing.length) {
+      showMsg('addr-warning', 'warning',
+        `⚠️ This client is missing: ${missing.join(', ')}. Please update the Trade Clients record before shipping.`);
+    }
+  }
+
+  document.getElementById('txn-section').style.display = 'block';
+  updateSummary();
+}
+
+// ─── Checkbox handling ───────────────────────────────────────────────────────
+function onCheck() { updateSummary(); }
+
+function toggleAll(val) {
+  document.querySelectorAll('#txn-list input[type=checkbox]').forEach(cb => cb.checked = val);
+  updateSummary();
+}
+
+function getCheckedRows() {
+  return [...document.querySelectorAll('#txn-list .txn-row')]
+    .filter(r => r.querySelector('input').checked);
+}
+
+function updateSummary() {
+  const checked = getCheckedRows();
+  const box = document.getElementById('summary-box');
+  const btn = document.getElementById('submit-btn');
+
+  // highlight rows
+  document.querySelectorAll('#txn-list .txn-row').forEach(r => {
+    r.classList.toggle('checked', r.querySelector('input').checked);
+  });
+
+  if (checked.length === 0) {
+    box.style.display = 'none';
+    btn.disabled = true;
+    return;
+  }
+
+  const clientId = document.getElementById('client-select').value;
+  const client   = allClients.find(c => c.id === clientId);
+  const clientName = client?.fields['Trade Account'] || '';
+
+  document.getElementById('summary-title').textContent =
+    `${checked.length} line(s) selected for shipment to ${clientName}`;
+
+  const lines = document.getElementById('summary-lines');
+  lines.innerHTML = '';
+  checked.forEach(r => {
+    const txnId = allTxns.find(t => t.id === r.dataset.id);
+    const prodId = txnId?.fields['Product']?.[0];
+    const prod   = prodId ? allProducts[prodId] : null;
+    const name   = prod?.Name || prod?.SKU || 'Unknown';
+    const qty    = txnId?.fields['Quantity'] || 0;
+    const p = document.createElement('p');
+    p.className = 'summary-line';
+    p.textContent = `· ${name} × ${qty}`;
+    lines.appendChild(p);
+  });
+
+  box.style.display = 'block';
+  btn.disabled = false;
+}
+
+// ─── Submit order ────────────────────────────────────────────────────────────
+async function submitOrder() {
+  const clientId = document.getElementById('client-select').value;
+  const staff    = document.getElementById('staff-select').value;
+  const checked  = getCheckedRows();
+
+  if (!clientId) { showMsg('result-msg', 'error', 'Please select a client.'); return; }
+  if (checked.length === 0) { showMsg('result-msg', 'error', 'Please select at least one transaction.'); return; }
+
+  const client = allClients.find(c => c.id === clientId);
+  if (!client) { showMsg('result-msg', 'error', 'Client not found.'); return; }
+
+  // Address validation
+  const addr1    = client.fields['Address 1'];
+  const postcode = client.fields['Postcode'];
+  const country  = client.fields['Country'];
+  if (!addr1 || !postcode || !country) {
+    showMsg('result-msg', 'error', 'Client is missing address fields. Please update the Trade Clients record before shipping.');
+    return;
+  }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Creating order…';
+  showMsg('result-msg', 'info', 'Creating ShipStation order…');
+
+  try {
+    const clientName = client.fields['Trade Account'] || '';
+    const checkedTxns = checked.map(r => allTxns.find(t => t.id === r.dataset.id)).filter(Boolean);
+    const txnRefs  = checkedTxns.map(t => 'Txn #' + (t.fields['Txn ID'] || t.id)).join(', ');
+    const sourceRef = txnRefs + ' — ' + clientName;
+
+    // Create ShipStation Orders record
+    const orderRec = await atPost(T_SS_ORDERS, {
+      'Source System':     'Trade Consignment',
+      'ShipStation Store': 'trade',
+      'Status':            'Pending',
+      'Recipient Name':    client.fields['Delivery Contact Name'] || '',
+      'Recipient Company': client.fields['Delivery Business / Store Name'] || '',
+      'Address 1':         client.fields['Address 1'] || '',
+      'Address 2':         client.fields['Address 2'] || '',
+      'City':              client.fields['City'] || '',
+      'State / Region':    client.fields['State / Region'] || '',
+      'Postcode':          client.fields['Postcode'] || '',
+      'Country':           client.fields['Country'] || '',
+      'Phone':             client.fields['Delivery Contact Phone'] || '',
+      'Email':             client.fields['Delivery Contact Email'] || '',
+      'Internal Notes':    'Trade consignment shipment to ' + clientName + (staff ? ' · Dispatched by ' + staff : ''),
+      'Source Record ID':  checkedTxns.map(t => t.id).join(', '),
+      'Source Record Ref': sourceRef,
+      'DateTime Sent':     new Date().toISOString(),
+    });
+
+    const ssOrderId = orderRec.id;
+    await auditLog('Success', 'Created ShipStation order for ' + sourceRef, clientId);
+
+    // Create order lines
+    for (const txn of checkedTxns) {
+      const prodId  = txn.fields['Product']?.[0];
+      const prod    = prodId ? allProducts[prodId] : null;
+      const weightKg = prod?.['Weight (kg)'] || 0;
+      const weightG  = Math.round(weightKg * 1000);
+      const qty      = txn.fields['Quantity'] || 0;
+      const sku      = prod?.SKU || '';
+
+      await atPost(T_SS_LINES, {
+        'ShipStation Order':   [ssOrderId],
+        'SKU':                 sku,
+        'Product Name':        prod?.Name || '',
+        'Quantity':            qty,
+        'Weight (g)':          weightG,
+        'Length (cm)':         prod?.['Dimensions (Length)'] || 0,
+        'Width (cm)':          prod?.['Dimensions (Width)'] || 0,
+        'Height (cm)':         prod?.['Dimensions (Height)'] || 0,
+        'Unit Price':          prod?.['Direct Trade Price (ex VAT)'] || 0,
+        'Commodity Code':      prod?.['Commodity Code'] || '',
+        'Country of Origin':   prod?.['Country of Origin'] || '',
+        'Customs Description': prod?.['Customs Description'] || '',
+      });
+
+      await auditLog('Success', `Added order line: ${sku} × ${qty} for ${clientName}`, clientId);
+
+      // Mark transaction as sent
+      await atPatch(T_TXN, txn.id, { 'Sent to ShipStation': true });
+    }
+
+    await auditLog('Success',
+      `${sourceRef} written to ShipStation outbox (${checkedTxns.length} line(s))`, clientId);
+
+    // Remove sent txns from local list so they disappear
+    const sentIds = new Set(checkedTxns.map(t => t.id));
+    allTxns = allTxns.filter(t => !sentIds.has(t.id));
+
+    showMsg('result-msg', 'success',
+      `✅ ShipStation order created for ${clientName} — ${checkedTxns.length} product line(s). Reference: ${sourceRef}`);
+
+    // Reset UI
+    document.getElementById('client-select').value = '';
+    document.getElementById('txn-section').style.display = 'none';
+
+  } catch(err) {
+    await auditLog('Error', `ShipStation dispatch failed: ${err.message}`, clientId);
+    showMsg('result-msg', 'error', '❌ Error: ' + err.message);
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = 'Create ShipStation Order →';
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function showMsg(id, type, text) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = `<div class="msg msg-${type}">${text}</div>`;
+}
+
+// Enter key on token field
+document.getElementById('pat').addEventListener('keydown', e => {
+  if (e.key === 'Enter') loadData();
+});
+</script>
+</body>
+</html>
