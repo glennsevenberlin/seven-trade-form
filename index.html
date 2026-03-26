@@ -51,7 +51,7 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
-  <p class="version">v1.63</p><a class="nav-link" href="dispatch.html">ShipStation Dispatch →</a>
+  <p class="version">v1.64</p><a class="nav-link" href="dispatch.html">ShipStation Dispatch →</a>
 </div>
 
 <div class="card">
@@ -318,13 +318,30 @@ function refreshProductDropdowns() {
   });
 }
 
+// ─── Set max quantity when product selected in Sold mode ─────────────────────
+function onProductSelect(sel) {
+  const txnType  = document.getElementById('txnType').value;
+  const clientId = document.getElementById('clientSelect').value;
+  const qtyInput = sel.closest('tr').querySelector('.qty-input');
+
+  if (txnType === 'Sold' && clientId && sel.value) {
+    const inv = tradeInventory.find(r => r.clientId === clientId && r.productId === sel.value);
+    const inStock = inv ? inv.inStock : 0;
+    qtyInput.max = inStock;
+    qtyInput.title = inStock + ' in stock';
+  } else {
+    qtyInput.removeAttribute('max');
+    qtyInput.title = '';
+  }
+}
+
 function addRow() {
   const tbody = document.getElementById('productRows');
   const txnType = document.getElementById('txnType').value;
   const showInvoice = txnType === 'Invoiced';
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td><select class="product-select"></select></td>
+    <td><select class="product-select" onchange="onProductSelect(this)"></select></td>
     <td class="qty-col"><input type="number" class="qty-input" min="1" placeholder="0"></td>
     <td class="invoice-col${showInvoice ? ' visible' : ''}"><input type="text" class="invoice-input" placeholder="Invoice #"></td>
     <td class="remove-col"><button class="btn-remove" onclick="removeRow(this)">×</button></td>
@@ -368,6 +385,18 @@ async function submitForm() {
     const qty        = parseInt(row.querySelector('.qty-input').value);
     const invoiceNum = row.querySelector('.invoice-input')?.value.trim() || '';
     if (!productId || !qty || qty < 1) { valid = false; return; }
+
+    // For Sold transactions, check quantity doesn't exceed stock
+    if (txnType === 'Sold') {
+      const inv = tradeInventory.find(r => r.clientId === clientId && r.productId === productId);
+      const inStock = inv ? inv.inStock : 0;
+      if (qty > inStock) {
+        const productName = row.querySelector('.product-select').options[row.querySelector('.product-select').selectedIndex].text;
+        showStatus('error', `Quantity for ${productName.split(' (')[0]} exceeds stock held by this client (${inStock} in stock). Please correct before submitting.`);
+        valid = false;
+        return;
+      }
+    }
 
     const fields = {
       'Client':   [clientId],
