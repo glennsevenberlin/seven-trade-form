@@ -61,7 +61,7 @@
     <h1>Add Third Party Stock</h1>
     <p>Receive 3rd party vinyl via Discogs ID → Airtable Products + Stock transactions</p>
   </div>
-  <div class="version">v1.09</div>
+  <div class="version">v1.11</div>
 </header>
 
 <div class="container">
@@ -254,10 +254,21 @@ function parseDiscogs(d, costPrice, distributor) {
   return { discogsId: String(d.id), fields: fields, imageUrl: image, artist: artist, title: title };
 }
 
-function fetchImageAsAttachment(imageUrl) {
+async function fetchImageAsAttachment(imageUrl, token) {
   if (!imageUrl) return null;
-  // Pass URL directly — Airtable fetches it server-side, bypassing browser CORS restrictions
-  return [{ url: imageUrl, filename: 'cover.jpg' }];
+  try {
+    var proxyUrl = 'https://seven.berlin/discogs/image-proxy.php?url=' + encodeURIComponent(imageUrl);
+    var res = await fetch(proxyUrl, {
+      headers: { 'X-Discogs-Token': token }
+    });
+    if (!res.ok) return null;
+    var data = await res.json();
+    if (!data.dataUri) return null;
+    return [{ url: data.dataUri, filename: 'cover.jpg' }];
+  } catch(e) {
+    console.warn('Image proxy failed:', e);
+    return null;
+  }
 }
 
 async function searchProduct(discogsId, pat) {
@@ -349,7 +360,7 @@ async function submitForm() {
       var parsed = parseDiscogs(discogsData, item.cost, distributor);
       log('  ✓ Discogs: ' + parsed.artist + ' — ' + parsed.title, 'success');
 
-      var imageAttachment = fetchImageAsAttachment(parsed.imageUrl);
+      var imageAttachment = await fetchImageAsAttachment(parsed.imageUrl, discogsToken);
 
       var existing = await searchProduct(parsed.discogsId, pat);
       var action = existing ? 'updated' : 'created';
