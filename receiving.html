@@ -61,7 +61,7 @@
     <h1>Add Third Party Stock</h1>
     <p>Receive 3rd party vinyl via Discogs ID → Airtable Products + Stock transactions</p>
   </div>
-  <div class="version">v1.13</div>
+  <div class="version">v1.14</div>
 </header>
 
 <div class="container">
@@ -108,6 +108,9 @@
     <div style="font-size:13px;font-weight:600;margin-bottom:10px;">Processing log</div>
     <div class="log-entries" id="logEntries"></div>
     <div class="summary" id="summary"></div>
+    <div style="margin-top:14px;" id="newBatchContainer" style="display:none;">
+      <button class="btn btn-primary" id="newBatchBtn">+ Start new batch</button>
+    </div>
   </div>
 </div>
 
@@ -413,15 +416,22 @@ async function submitForm() {
 
   btn.disabled = false;
   btn.textContent = 'Submit batch';
-  lines = []; lineId = 0;
-  document.getElementById('distributor').value = '';
-  addLine(); addLine(); addLine();
+  document.getElementById('newBatchContainer').style.display = 'block';
 }
 
 // Initialise
 document.getElementById('saveCredsBtn').addEventListener('click', saveCreds);
 document.getElementById('addLineBtn').addEventListener('click', addLine);
 document.getElementById('submitBtn').addEventListener('click', submitForm);
+document.getElementById('newBatchBtn').addEventListener('click', function() {
+  lines = []; lineId = 0;
+  document.getElementById('distributor').value = '';
+  document.getElementById('linesContainer').innerHTML = '';
+  document.getElementById('log').style.display = 'none';
+  document.getElementById('newBatchContainer').style.display = 'none';
+  addLine(); addLine(); addLine();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
 
 var savedPat = sessionStorage.getItem('at_pat');
 var savedTok = sessionStorage.getItem('discogs_token');
