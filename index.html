@@ -50,7 +50,7 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
-  <p class="version">v1.61</p><a class="nav-link" href="dispatch.html">ShipStation Dispatch →</a>
+  <p class="version">v1.62</p><a class="nav-link" href="dispatch.html">ShipStation Dispatch →</a>
 </div>
 
 <div class="card">
@@ -132,6 +132,15 @@ const SYSTEM = 'Trade Stock Sys';
 let clients = [];
 let products = [];
 
+// ─── Cookie helpers ──────────────────────────────────────────────────────────
+function setCookie(name, value) {
+  document.cookie = name + '=' + encodeURIComponent(value) + '; path=/; SameSite=Strict';
+}
+function getCookie(name) {
+  const m = document.cookie.match('(?:^|; )' + name + '=([^;]*)');
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 function getToken() {
   return document.getElementById('apiToken').value.trim();
 }
@@ -183,6 +192,9 @@ async function writeAudit(status, notes, clientId) {
 async function loadData() {
   const token = getToken();
   if (!token) { showLoadStatus('error', 'Please paste your API token first.'); return; }
+
+  // Save token to cookie for this session
+  setCookie('seven_pat', token);
 
   showLoadStatus('loading', 'Loading clients and products...');
 
@@ -343,6 +355,10 @@ async function submitForm() {
 }
 
 addRow();
+
+// ─── Pre-fill token from cookie if available ─────────────────────────────────
+const saved = getCookie('seven_pat');
+if (saved) document.getElementById('apiToken').value = saved;
 </script>
 </body>
 </html>
