@@ -276,6 +276,7 @@ function renderInvoicing(txns) {
     const block = document.createElement('div');
     block.className = 'client-block';
     block.id = blockId;
+    block.dataset.txnIds = txnList.map(t => t.id).join(',');
     block.innerHTML = `
       <div class="client-header">
         <span class="client-name">${clientName}</span>
@@ -312,7 +313,7 @@ function renderInvoicing(txns) {
           </div>
           <div>
             <button class="btn btn-primary" id="btn-${clientId}"
-              onclick="markInvoiced('${clientId}', ${JSON.stringify(txnList.map(t => t.id))})">
+              onclick="markInvoiced('${clientId}')">
               Mark as invoiced
             </button>
           </div>
@@ -325,7 +326,9 @@ function renderInvoicing(txns) {
 }
 
 // ─── Mark as invoiced ────────────────────────────────────────────────────────
-async function markInvoiced(clientId, txnIds) {
+async function markInvoiced(clientId) {
+  const block   = document.getElementById('block-' + clientId);
+  const txnIds  = block.dataset.txnIds.split(',').filter(Boolean);
   const invNum  = document.getElementById('inv-num-' + clientId).value.trim();
   const invDate = document.getElementById('inv-date-' + clientId).value;
 
