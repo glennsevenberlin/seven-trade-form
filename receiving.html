@@ -98,7 +98,7 @@
     <h1>Add Third Party Stock</h1>
     <p>Receive 3rd party vinyl via Discogs ID → Airtable Products + Stock transactions</p>
   </div>
-  <div class="version">v1.05</div>
+  <div class="version">v1.06</div>
 </header>
 
 <div class="container">
@@ -186,7 +186,7 @@
   function getPat() { return document.getElementById('airtablePat').value.trim() || sessionStorage.getItem('at_pat') || ''; }
   function getDiscogsToken() { return document.getElementById('discogsToken').value.trim() || sessionStorage.getItem('discogs_token') || ''; }
 
-  window.addEventListener('load', () => {
+  document.addEventListener('DOMContentLoaded', () => {
     const pat = sessionStorage.getItem('at_pat');
     const tok = sessionStorage.getItem('discogs_token');
     if (pat) {
