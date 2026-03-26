@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Add Third Party Stock — SEVEN</title>
+<style>
+  :root {
+    --bg: #f5f5f5;
+    --card: #ffffff;
+    --border: #ddd;
+    --accent: #1a1a2e;
+    --accent2: #e94560;
+    --text: #222;
+    --muted: #666;
+    --success: #2e7d32;
+    --warning: #e65100;
+    --error: #c62828;
+    --radius: 6px;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; }
+
+  header { background: var(--accent); color: white; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 18px; font-weight: 600; }
+  header p { font-size: 12px; opacity: 0.7; margin-top: 2px; }
+  header .version { font-size: 11px; opacity: 0.5; background: rgba(255,255,255,0.1); padding: 4px 10px; border-radius: 20px; white-space: nowrap; align-self: flex-start; margin-top: 2px; }
+
+  .container { max-width: 1000px; margin: 24px auto; padding: 0 16px; }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+  .card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 14px; }
+
+  .creds-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: var(--muted); }
+  input[type=text], input[type=password], input[type=number] {
+    width: 100%; border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 8px 10px; font-size: 14px; font-family: var(--font);
+  }
+  input:focus { outline: 2px solid var(--accent2); border-color: transparent; }
+
+  .lines-header {
+    display: grid;
+    grid-template-columns: 40px 1fr 110px 130px 36px;
+    gap: 8px; padding: 0 0 6px 0;
+    border-bottom: 2px solid var(--border);
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);
+  }
+  .line-row {
+    display: grid;
+    grid-template-columns: 40px 1fr 110px 130px 36px;
+    gap: 8px; padding: 8px 0; border-bottom: 1px solid #f0f0f0; align-items: center;
+  }
+  .line-num { font-size: 12px; color: var(--muted); font-weight: 600; padding-top: 2px; }
+  .btn-remove {
+    background: none; border: 1px solid #ddd; border-radius: 4px; width: 30px; height: 30px;
+    cursor: pointer; color: var(--muted); font-size: 16px; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .btn-remove:hover { background: #fff0f0; border-color: var(--error); color: var(--error); }
+
+  .actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .btn { padding: 9px 18px; border-radius: var(--radius); border: none; font-size: 14px; font-family: var(--font); cursor: pointer; font-weight: 500; transition: all 0.15s; }
+  .btn-secondary { background: white; border: 1px solid var(--border); color: var(--text); }
+  .btn-secondary:hover { background: #f5f5f5; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #2d2d4e; }
+  .btn-primary:disabled { background: #999; cursor: not-allowed; }
+
+  #log { display: none; }
+  .log-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+  .log-entries { background: #1a1a2e; border-radius: var(--radius); padding: 14px; font-family: 'Courier New', monospace; font-size: 12px; max-height: 360px; overflow-y: auto; }
+  .log-entry { padding: 2px 0; line-height: 1.6; }
+  .log-entry.info { color: #aac4ff; }
+  .log-entry.success { color: #69db7c; }
+  .log-entry.warning { color: #ffd43b; }
+  .log-entry.error { color: #ff6b6b; }
+  .log-entry.muted { color: #444; }
+
+  .summary { margin-top: 12px; display: flex; gap: 16px; flex-wrap: wrap; }
+  .summary-pill { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+  .pill-success { background: #e8f5e9; color: var(--success); }
+  .pill-error { background: #ffebee; color: var(--error); }
+  .pill-warning { background: #fff3e0; color: var(--warning); }
+
+  .cred-status { font-size: 11px; margin-top: 4px; }
+  .cred-status.saved { color: var(--success); }
+
+  .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid #aac4ff; border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 6px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Add Third Party Stock</h1>
+    <p>Receive 3rd party vinyl via Discogs ID → Airtable Products + Stock transactions</p>
+  </div>
+  <div class="version">v1.0</div>
+</header>
+
+<div class="container">
+
+  <!-- Credentials -->
+  <div class="card">
+    <h2>Credentials</h2>
+    <div class="creds-grid">
+      <div>
+        <label>Airtable PAT</label>
+        <input type="password" id="airtablePat" placeholder="pat..." autocomplete="off">
+        <div class="cred-status" id="patStatus"></div>
+      </div>
+      <div>
+        <label>Discogs Token</label>
+        <input type="password" id="discogsToken" placeholder="Your Discogs personal access token" autocomplete="off">
+        <div class="cred-status" id="discogsStatus"></div>
+      </div>
+    </div>
+    <div style="margin-top:10px;">
+      <button class="btn btn-secondary" onclick="saveCreds()">Save credentials for session</button>
+    </div>
+  </div>
+
+  <!-- Delivery details -->
+  <div class="card">
+    <h2>Delivery Details</h2>
+    <div style="max-width: 400px;">
+      <label>Distributor</label>
+      <input type="text" id="distributor" placeholder="e.g. Redeye, Rubadub, Clone...">
+    </div>
+  </div>
+
+  <!-- Lines -->
+  <div class="card">
+    <h2>Stock Lines</h2>
+    <div class="lines-header">
+      <div>#</div>
+      <div>Discogs Release ID</div>
+      <div>Qty Received</div>
+      <div>Cost Price (ex VAT)</div>
+      <div></div>
+    </div>
+    <div id="linesContainer"></div>
+    <div class="actions">
+      <button class="btn btn-secondary" onclick="addLine()">+ Add line</button>
+      <button class="btn btn-primary" id="submitBtn" onclick="submitForm()">Submit batch</button>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="card" id="log">
+    <div class="log-title">Processing log</div>
+    <div class="log-entries" id="logEntries"></div>
+    <div class="summary" id="summary"></div>
+  </div>
+
+</div>
+
+<script>
+  const BASE_ID = 'appKSv3xAO9AHTN6g';
+  const PRODUCTS_TBL = 'tblvy0yjEIpAS81Hg';
+  const STOCK_TBL_NAME = 'Stock%20transactions';
+  const AUDIT_TBL = 'tbl8fC3AoyShfqvm8';
+
+  let lines = [];
+  let lineId = 0;
+
+  // ── Credentials ──────────────────────────────────────────────
+  function saveCreds() {
+    const pat = document.getElementById('airtablePat').value.trim();
+    const tok = document.getElementById('discogsToken').value.trim();
+    if (pat) {
+      sessionStorage.setItem('at_pat', pat);
+      document.getElementById('patStatus').textContent = '✓ Saved for this session';
+      document.getElementById('patStatus').className = 'cred-status saved';
+    }
+    if (tok) {
+      sessionStorage.setItem('discogs_token', tok);
+      document.getElementById('discogsStatus').textContent = '✓ Saved for this session';
+      document.getElementById('discogsStatus').className = 'cred-status saved';
+    }
+  }
+
+  function getPat() { return document.getElementById('airtablePat').value.trim() || sessionStorage.getItem('at_pat') || ''; }
+  function getDiscogsToken() { return document.getElementById('discogsToken').value.trim() || sessionStorage.getItem('discogs_token') || ''; }
+
+  window.addEventListener('load', () => {
+    const pat = sessionStorage.getItem('at_pat');
+    const tok = sessionStorage.getItem('discogs_token');
+    if (pat) {
+      document.getElementById('airtablePat').value = pat;
+      document.getElementById('patStatus').textContent = '✓ Saved for this session';
+      document.getElementById('patStatus').className = 'cred-status saved';
+    }
+    if (tok) {
+      document.getElementById('discogsToken').value = tok;
+      document.getElementById('discogsStatus').textContent = '✓ Saved for this session';
+      document.getElementById('discogsStatus').className = 'cred-status saved';
+    }
+    addLine(); addLine(); addLine();
+  });
+
+  // ── Lines ─────────────────────────────────────────────────────
+  function addLine() {
+    const id = ++lineId;
+    lines.push(id);
+    renderLines();
+  }
+
+  function removeLine(id) {
+    lines = lines.filter(l => l !== id);
+    renderLines();
+  }
+
+  function renderLines() {
+    const c = document.getElementById('linesContainer');
+    c.innerHTML = '';
+    lines.forEach((id, idx) => {
+      const row = document.createElement('div');
+      row.className = 'line-row';
+      row.innerHTML = `
+        <div class="line-num">${idx + 1}</div>
+        <div><input type="text" id="did-${id}" placeholder="e.g. 12345678" style="font-family:monospace"></div>
+        <div><input type="number" id="qty-${id}" placeholder="0" min="1" step="1"></div>
+        <div><input type="number" id="cost-${id}" placeholder="0.00" min="0" step="0.01"></div>
+        <div>${lines.length > 1 ? `<button class="btn-remove" onclick="removeLine(${id})">×</button>` : ''}</div>
+      `;
+      c.appendChild(row);
+    });
+  }
+
+  // ── Logging ───────────────────────────────────────────────────
+  function showLog() { document.getElementById('log').style.display = 'block'; }
+
+  function log(msg, type = 'info') {
+    const el = document.getElementById('logEntries');
+    const div = document.createElement('div');
+    div.className = 'log-entry ' + type;
+    div.innerHTML = msg;
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function clearLog() {
+    document.getElementById('logEntries').innerHTML = '';
+    document.getElementById('summary').innerHTML = '';
+  }
+
+  // ── Audit Trail ───────────────────────────────────────────────
+  async function audit(status, notes, pat) {
+    try {
+      await fetch(`https://api.airtable.com/v0/${BASE_ID}/${AUDIT_TBL}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${pat}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: { 'System': 'DiscogsSys', 'Status': status, 'Notes': notes } })
+      });
+    } catch (e) {
+      console.warn('Audit write failed:', e);
+    }
+  }
+
+  // ── Discogs API ───────────────────────────────────────────────
+  async function fetchDiscogs(releaseId, token) {
+    const url = `https://api.discogs.com/releases/${releaseId}`;
+    const res = await fetch(url, {
+      headers: {
+        'Authorization': `Discogs token=${token}`,
+        'User-Agent': 'SevenBerlin/1.0'
+      }
+    });
+    if (!res.ok) throw new Error(`Discogs API returned ${res.status} for release ID ${releaseId}`);
+    return res.json();
+  }
+
+  function parseDiscogs(d, costPrice, distributor) {
+    const stripDisambig = n => n.replace(/\s*\(\d+\)$/, '').trim();
+
+    const artist = d.artists && d.artists.length ? stripDisambig(d.artists[0].name) : 'Unknown Artist';
+    const title = d.title || '';
+    const label = d.labels && d.labels.length ? d.labels[0] : null;
+    const fmt = d.formats && d.formats.length ? d.formats[0] : null;
+
+    const barcode = (d.identifiers || []).find(i => i.type === 'Barcode');
+    const sku = barcode ? barcode.value : (label ? label.catno : '');
+    const gtin = barcode ? barcode.value : '';
+
+    const tracklist = (d.tracklist || []).map(t => `${t.position}. ${t.title}`).join('\n');
+
+    const fmtName = fmt ? fmt.name : '';
+    const fmtDescs = fmt && fmt.descriptions ? fmt.descriptions.join(', ') : '';
+    const productDesc = [
+      fmtName && fmtDescs ? `${fmtName}, ${fmtDescs}` : (fmtName || fmtDescs),
+      d.genres && d.genres.length ? `Genre: ${d.genres.join(', ')}` : '',
+      d.year ? `Year: ${d.year}` : ''
+    ].filter(Boolean).join('\n');
+
+    const image = d.images && d.images.length ? d.images[0].uri : null;
+
+    const releasedDate = d.released
+      ? (d.released.length === 4 ? `${d.released}-01-01` : d.released)
+      : null;
+
+    return {
+      discogsId: String(d.id),
+      fields: {
+        'Discogs ID':              String(d.id),
+        'Name':                    `${artist} — ${title}`,
+        'Product short description': tracklist,
+        'Product description':     productDesc,
+        ...(d.lowest_price != null ? { 'Regular Price': d.lowest_price } : {}),
+        'Categories':              'Other Labels',
+        'Catalog visibility':      'hidden',
+        'Tax status':              'taxable',
+        'Product type':            'simple',
+        'Brand':                   label ? label.name : '',
+        ...(gtin ? { 'GTIN/EAC': gtin } : {}),
+        'Sales Channels':          ['Online', 'In-Store'],
+        'Cost Price (ex VAT)':     costPrice,
+        'SKUGRP':                  'Discogs',
+        'In-store only':           'yes',
+        ...(releasedDate ? { 'Music Release Date': releasedDate } : {}),
+        ...(d.master_id ? { 'Master Release ID': String(d.master_id) } : {}),
+        'Record Label':            label ? label.name : '',
+        'Artist Name':             artist,
+        'Label Cat ID':            label ? label.catno : '',
+        'Release Title':           title,
+        'Year of Release':         d.year ? String(d.year) : '',
+        'Genre':                   (d.genres || []).join(', '),
+        'Style':                   (d.styles || []).join(', '),
+        'Format':                  fmtName,
+        'Format Details':          fmtDescs,
+        'Track List':              tracklist,
+        'Discogs URL':             d.uri || `https://www.discogs.com/release/${d.id}`,
+        'Item Type':               'Music - 3rd Party',
+        'Distributor':             distributor,
+        ...(sku ? { 'SKU': sku } : {})
+      },
+      imageUrl: image,
+      artist,
+      title
+    };
+  }
+
+  // ── Airtable helpers ──────────────────────────────────────────
+  async function searchProduct(discogsId, pat) {
+    const filter = encodeURIComponent(`{Discogs ID} = "${discogsId}"`);
+    const url = `https://api.airtable.com/v0/${BASE_ID}/${PRODUCTS_TBL}?filterByFormula=${filter}&maxRecords=1`;
+    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${pat}` } });
+    if (!res.ok) throw new Error(`Airtable search failed (${res.status})`);
+    const data = await res.json();
+    return data.records && data.records.length ? data.records[0] : null;
+  }
+
+  async function createProduct(fields, imageUrl, pat) {
+    const body = { fields: { ...fields } };
+    if (imageUrl) body.fields['Product image'] = [{ url: imageUrl }];
+    const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PRODUCTS_TBL}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${pat}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || `Product create failed (${res.status})`); }
+    return (await res.json()).id;
+  }
+
+  async function updateProduct(recordId, fields, imageUrl, pat) {
+    const body = { fields: { ...fields } };
+    if (imageUrl) body.fields['Product image'] = [{ url: imageUrl }];
+    const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PRODUCTS_TBL}/${recordId}`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `Bearer ${pat}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || `Product update failed (${res.status})`); }
+    return recordId;
+  }
+
+  async function createStockTxn(productRecordId, qty, artist, title, distributor, pat) {
+    const body = {
+      fields: {
+        'Product':           [productRecordId],
+        'Stock transaction': qty,
+        'User':              'DiscogsSys',
+        'Comment':           `Stock received — ${artist} — ${title} from ${distributor}`
+      }
+    };
+    const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${STOCK_TBL_NAME}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${pat}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || `Stock transaction failed (${res.status})`); }
+  }
+
+  // ── Submit ────────────────────────────────────────────────────
+  async function submitForm() {
+    const pat = getPat();
+    const discogsToken = getDiscogsToken();
+    const distributor = document.getElementById('distributor').value.trim();
+
+    if (!pat)          { alert('Please enter your Airtable PAT.'); return; }
+    if (!discogsToken) { alert('Please enter your Discogs token.'); return; }
+    if (!distributor)  { alert('Please enter a distributor name.'); return; }
+
+    // Collect and validate lines
+    const batch = [];
+    for (const id of lines) {
+      const did  = document.getElementById(`did-${id}`).value.trim();
+      const qty  = parseInt(document.getElementById(`qty-${id}`).value);
+      const cost = parseFloat(document.getElementById(`cost-${id}`).value);
+      if (!did) continue;
+      if (!qty || qty < 1)       { alert(`Line ${lines.indexOf(id) + 1}: please enter a valid quantity.`); return; }
+      if (isNaN(cost) || cost < 0) { alert(`Line ${lines.indexOf(id) + 1}: please enter a valid cost price.`); return; }
+      batch.push({ did, qty, cost });
+    }
+
+    if (!batch.length) { alert('Please add at least one stock line.'); return; }
+
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Processing…';
+    clearLog();
+    showLog();
+
+    log(`Batch started — ${batch.length} line(s) — Distributor: ${distributor}`, 'info');
+    await audit('Success', `Batch started — ${batch.length} line(s) — Distributor: ${distributor}`, pat);
+    log('', 'muted');
+
+    let ok = 0, errs = 0, created = 0, updated = 0;
+
+    for (let i = 0; i < batch.length; i++) {
+      const { did, qty, cost } = batch[i];
+      log(`<span class="spinner"></span> Line ${i + 1}/${batch.length} — Discogs ID: ${did}`, 'info');
+
+      try {
+        // 1. Fetch from Discogs
+        const discogsData = await fetchDiscogs(did, discogsToken);
+        const parsed = parseDiscogs(discogsData, cost, distributor);
+        log(`  ✓ Discogs: ${parsed.artist} — ${parsed.title}`, 'success');
+
+        // 2. Upsert Products
+        const existing = await searchProduct(parsed.discogsId, pat);
+        let productRecordId, action;
+
+        if (existing) {
+          productRecordId = existing.id;
+          await updateProduct(productRecordId, parsed.fields, parsed.imageUrl, pat);
+          log(`  ✓ Product updated — record ${productRecordId}`, 'success');
+          action = 'updated'; updated++;
+        } else {
+          productRecordId = await createProduct(parsed.fields, parsed.imageUrl, pat);
+          log(`  ✓ Product created — record ${productRecordId}`, 'success');
+          action = 'created'; created++;
+        }
+
+        // 3. Stock transaction
+        await createStockTxn(productRecordId, qty, parsed.artist, parsed.title, distributor, pat);
+        log(`  ✓ Stock transaction written — qty: +${qty}`, 'success');
+
+        // 4. Audit success
+        await audit('Success', [
+          `Product ${action}: ${parsed.artist} — ${parsed.title}`,
+          `Discogs ID: ${did} | Airtable record: ${productRecordId}`,
+          `Label: ${parsed.fields['Record Label']} | Cat: ${parsed.fields['Label Cat ID']}`,
+          `Format: ${parsed.fields['Format']} ${parsed.fields['Format Details']}`,
+          `Qty received: +${qty} | Cost price: €${cost}`,
+          `Distributor: ${distributor}`,
+          `Image: ${parsed.imageUrl ? 'uploaded' : 'none found'}`,
+          `Discogs URL: ${parsed.fields['Discogs URL']}`
+        ].join('\n'), pat);
+
+        ok++;
+      } catch (err) {
+        log(`  ✗ Error: ${err.message}`, 'error');
+        await audit('Error', [
+          `Failed — Discogs ID: ${did}`,
+          `Error: ${err.message}`,
+          `Distributor: ${distributor} | Qty: ${qty} | Cost: €${cost}`
+        ].join('\n'), pat);
+        errs++;
+      }
+
+      log('', 'muted');
+      if (i < batch.length - 1) await sleep(300);
+    }
+
+    log('─────────────────────────────────', 'muted');
+    log(`Batch complete — ${ok} OK, ${errs} error(s)`, ok > 0 && errs === 0 ? 'success' : 'warning');
+
+    await audit(errs > 0 ? 'Warning' : 'Success', [
+      `Batch complete — Distributor: ${distributor}`,
+      `Lines: ${batch.length} | OK: ${ok} | Errors: ${errs}`,
+      `New products created: ${created} | Existing updated: ${updated}`
+    ].join('\n'), pat);
+
+    const summary = document.getElementById('summary');
+    if (ok)   summary.innerHTML += `<span class="summary-pill pill-success">✓ ${ok} processed (${created} new, ${updated} updated)</span>`;
+    if (errs) summary.innerHTML += `<span class="summary-pill pill-error">✗ ${errs} error(s)</span>`;
+
+    btn.disabled = false;
+    btn.textContent = 'Submit batch';
+  }
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+</body>
+</html>
