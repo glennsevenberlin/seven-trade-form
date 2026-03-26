@@ -37,6 +37,7 @@
   .status.success { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; display: block; }
   .status.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; display: block; }
   .status.loading { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; display: block; }
+  .status.warning { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; display: block; }
   .invoice-col { display: none; }
   .invoice-col.visible { display: table-cell; }
   .qty-col { width: 90px; }
@@ -50,7 +51,7 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
-  <p class="version">v1.62</p><a class="nav-link" href="dispatch.html">ShipStation Dispatch →</a>
+  <p class="version">v1.63</p><a class="nav-link" href="dispatch.html">ShipStation Dispatch →</a>
 </div>
 
 <div class="card">
@@ -86,13 +87,13 @@
   <div class="row">
     <div class="form-group">
       <label>Client</label>
-      <select id="clientSelect">
+      <select id="clientSelect" onchange="onClientOrTypeChange()">
         <option value="">— Select client —</option>
       </select>
     </div>
     <div class="form-group">
       <label>Transaction type</label>
-      <select id="txnType" onchange="handleTxnTypeChange()">
+      <select id="txnType" onchange="onClientOrTypeChange()">
         <option value="">— Select type —</option>
         <option value="Shipped">Shipped</option>
         <option value="Sold">Sold</option>
@@ -100,6 +101,7 @@
       </select>
     </div>
   </div>
+  <div class="status" id="inventoryWarning" style="margin-top:12px;"></div>
 </div>
 
 <div class="card">
@@ -126,11 +128,14 @@
 <script>
 const BASE_ID = 'appKSv3xAO9AHTN6g';
 const TXN_TABLE_ID = 'tblrPpiv1u5B8Ag3c';
+const INV_TABLE_ID = 'tblvy0yjEIpAS81Hg'; // Trade Inventory
 const AUDIT_TABLE = 'Audit%20Trail';
+const TRADE_INV_TABLE = 'Trade%20Inventory';
 const SYSTEM = 'Trade Stock Sys';
 
 let clients = [];
 let products = [];
+let tradeInventory = []; // [{clientId, productId, inStock}]
 
 // ─── Cookie helpers ──────────────────────────────────────────────────────────
 function setCookie(name, value) {
@@ -157,14 +162,17 @@ function showStatus(type, msg) {
   el.textContent = msg;
 }
 
+function showInventoryWarning(msg) {
+  const el = document.getElementById('inventoryWarning');
+  if (msg) { el.className = 'status warning'; el.textContent = msg; }
+  else { el.className = 'status'; el.textContent = ''; }
+}
+
 async function apiCall(url, options = {}) {
   const token = getToken();
   const res = await fetch(url, {
     method: options.method || 'GET',
-    headers: {
-      'Authorization': 'Bearer ' + token,
-      'Content-Type': 'application/json'
-    },
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: options.body || undefined
   });
   if (!res.ok) {
@@ -175,14 +183,8 @@ async function apiCall(url, options = {}) {
 }
 
 async function writeAudit(status, notes, clientId) {
-  const fields = {
-    'System': SYSTEM,
-    'Status': status,
-    'Notes': notes
-  };
-  if (clientId) {
-    fields['Client'] = [clientId];
-  }
+  const fields = { 'System': SYSTEM, 'Status': status, 'Notes': notes };
+  if (clientId) fields['Client'] = [clientId];
   await apiCall('https://api.airtable.com/v0/' + BASE_ID + '/' + AUDIT_TABLE, {
     method: 'POST',
     body: JSON.stringify({ records: [{ fields }] })
@@ -192,13 +194,11 @@ async function writeAudit(status, notes, clientId) {
 async function loadData() {
   const token = getToken();
   if (!token) { showLoadStatus('error', 'Please paste your API token first.'); return; }
-
-  // Save token to cookie for this session
   setCookie('seven_pat', token);
-
-  showLoadStatus('loading', 'Loading clients and products...');
+  showLoadStatus('loading', 'Loading clients, products and inventory...');
 
   try {
+    // Load clients
     const clientData = await apiCall(
       'https://api.airtable.com/v0/' + BASE_ID + '/Trade%20Clients?fields[]=Trade%20Account&sort[0][field]=Trade%20Account'
     );
@@ -212,8 +212,8 @@ async function loadData() {
       sel.appendChild(opt);
     });
 
-    let allProducts = [];
-    let offset = null;
+    // Load products (all pages)
+    let allProducts = [], offset = null;
     do {
       let url = 'https://api.airtable.com/v0/' + BASE_ID + '/Products?fields[]=SKU&fields[]=Name&fields[]=Sales%20Channels&sort[0][field]=SKU';
       if (offset) url += '&offset=' + offset;
@@ -228,25 +228,93 @@ async function loadData() {
       return Array.isArray(ch) ? ch.includes('Direct Trade') : ch === 'Direct Trade';
     });
 
+    // Load Trade Inventory (all pages)
+    let allInv = [], invOffset = null;
+    do {
+      let url = 'https://api.airtable.com/v0/' + BASE_ID + '/' + TRADE_INV_TABLE +
+                '?fields[]=Client&fields[]=Product&fields[]=In%20stock';
+      if (invOffset) url += '&offset=' + invOffset;
+      const data = await apiCall(url);
+      allInv = allInv.concat(data.records);
+      invOffset = data.offset;
+    } while (invOffset);
+
+    tradeInventory = allInv.map(r => ({
+      clientId:  r.fields['Client']?.[0],
+      productId: r.fields['Product']?.[0],
+      inStock:   r.fields['In stock'] || 0
+    })).filter(r => r.clientId && r.productId);
+
     refreshProductDropdowns();
-    showLoadStatus('success', '✓ Loaded ' + clients.length + ' clients and ' + products.length + ' products.');
+    showLoadStatus('success', '✓ Loaded ' + clients.length + ' clients, ' + products.length + ' products and ' + tradeInventory.length + ' inventory records.');
 
   } catch(e) {
     showLoadStatus('error', 'Error loading data: ' + e.message);
   }
 }
 
-function refreshProductDropdowns() {
-  document.querySelectorAll('.product-select').forEach(sel => {
-    const current = sel.value;
-    sel.innerHTML = '<option value="">— Select product —</option>';
+// ─── Called when client or txn type changes ──────────────────────────────────
+function onClientOrTypeChange() {
+  handleTxnTypeChange();
+  refreshProductDropdowns();
+  showInventoryWarning('');
+
+  const txnType  = document.getElementById('txnType').value;
+  const clientId = document.getElementById('clientSelect').value;
+
+  if (txnType === 'Sold') {
+    if (!clientId) {
+      showInventoryWarning('Please select a client first to see available stock.');
+      return;
+    }
+    const hasStock = tradeInventory.some(r => r.clientId === clientId && r.inStock > 0);
+    if (!hasStock) {
+      showInventoryWarning('⚠️ No stock on record for this client. Make sure Shipped transactions have been entered first.');
+    }
+  }
+}
+
+// ─── Build product options for a select element ──────────────────────────────
+function buildProductOptions(selectEl, currentValue) {
+  const txnType  = document.getElementById('txnType').value;
+  const clientId = document.getElementById('clientSelect').value;
+
+  selectEl.innerHTML = '<option value="">— Select product —</option>';
+
+  let productList = products;
+
+  if (txnType === 'Sold' && clientId) {
+    // Only show products with inventory for this client where In Stock > 0
+    const stockMap = {};
+    tradeInventory.forEach(r => {
+      if (r.clientId === clientId && r.inStock > 0) {
+        stockMap[r.productId] = r.inStock;
+      }
+    });
+    productList = products.filter(p => stockMap[p.id] !== undefined);
+    productList.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      const stock = stockMap[p.id];
+      opt.textContent = p.fields.SKU + (p.fields.Name ? ' — ' + p.fields.Name : '') + ' (' + stock + ' in stock)';
+      selectEl.appendChild(opt);
+    });
+  } else {
+    // All products
     products.forEach(p => {
       const opt = document.createElement('option');
       opt.value = p.id;
       opt.textContent = p.fields.SKU + (p.fields.Name ? ' — ' + p.fields.Name : '');
-      sel.appendChild(opt);
+      selectEl.appendChild(opt);
     });
-    if (current) sel.value = current;
+  }
+
+  if (currentValue) selectEl.value = currentValue;
+}
+
+function refreshProductDropdowns() {
+  document.querySelectorAll('.product-select').forEach(sel => {
+    buildProductOptions(sel, sel.value);
   });
 }
 
@@ -256,13 +324,13 @@ function addRow() {
   const showInvoice = txnType === 'Invoiced';
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td><select class="product-select"><option value="">— Select product —</option></select></td>
+    <td><select class="product-select"></select></td>
     <td class="qty-col"><input type="number" class="qty-input" min="1" placeholder="0"></td>
     <td class="invoice-col${showInvoice ? ' visible' : ''}"><input type="text" class="invoice-input" placeholder="Invoice #"></td>
     <td class="remove-col"><button class="btn-remove" onclick="removeRow(this)">×</button></td>
   `;
   tbody.appendChild(tr);
-  refreshProductDropdowns();
+  buildProductOptions(tr.querySelector('.product-select'), null);
 }
 
 function removeRow(btn) {
@@ -273,23 +341,21 @@ function handleTxnTypeChange() {
   const txnType = document.getElementById('txnType').value;
   const showInvoice = txnType === 'Invoiced';
   document.getElementById('invoiceHeader').classList.toggle('visible', showInvoice);
-  document.querySelectorAll('.invoice-col').forEach(el => {
-    el.classList.toggle('visible', showInvoice);
-  });
+  document.querySelectorAll('.invoice-col').forEach(el => el.classList.toggle('visible', showInvoice));
 }
 
 async function submitForm() {
   const token = getToken();
   if (!token) { showStatus('error', 'Please enter your API token.'); return; }
 
-  const clientId = document.getElementById('clientSelect').value;
-  const txnType = document.getElementById('txnType').value;
-  const staffName = document.getElementById('staffName').value.trim() || 'Unknown';
-  const reason = document.getElementById('reasonForMovement').value.trim() || 'No reason given';
+  const clientId   = document.getElementById('clientSelect').value;
+  const txnType    = document.getElementById('txnType').value;
+  const staffName  = document.getElementById('staffName').value.trim() || 'Unknown';
+  const reason     = document.getElementById('reasonForMovement').value.trim() || 'No reason given';
   const clientName = document.getElementById('clientSelect').options[document.getElementById('clientSelect').selectedIndex].text;
 
   if (!clientId) { showStatus('error', 'Please select a client.'); return; }
-  if (!txnType) { showStatus('error', 'Please select a transaction type.'); return; }
+  if (!txnType)  { showStatus('error', 'Please select a transaction type.'); return; }
 
   const rows = document.querySelectorAll('#productRows tr');
   if (rows.length === 0) { showStatus('error', 'Please add at least one product.'); return; }
@@ -297,26 +363,19 @@ async function submitForm() {
   const records = [];
   let valid = true;
 
-  rows.forEach((row) => {
-    const productSel = row.querySelector('.product-select');
-    const productId = productSel.value;
-    const qty = parseInt(row.querySelector('.qty-input').value);
-    const invoiceInput = row.querySelector('.invoice-input');
-    const invoiceNum = invoiceInput ? invoiceInput.value.trim() : '';
-
+  rows.forEach(row => {
+    const productId  = row.querySelector('.product-select').value;
+    const qty        = parseInt(row.querySelector('.qty-input').value);
+    const invoiceNum = row.querySelector('.invoice-input')?.value.trim() || '';
     if (!productId || !qty || qty < 1) { valid = false; return; }
 
     const fields = {
-      'Client': [clientId],
-      'Product': [productId],
+      'Client':   [clientId],
+      'Product':  [productId],
       'Txn type': txnType,
       'Quantity': qty
     };
-
-    if (txnType === 'Invoiced' && invoiceNum) {
-      fields['Invoice number'] = invoiceNum;
-    }
-
+    if (txnType === 'Invoiced' && invoiceNum) fields['Invoice number'] = invoiceNum;
     records.push({ fields });
   });
 
@@ -329,14 +388,28 @@ async function submitForm() {
   try {
     for (let i = 0; i < records.length; i += 10) {
       const batch = records.slice(i, i + 10);
-      await apiCall(
-        'https://api.airtable.com/v0/' + BASE_ID + '/' + TXN_TABLE_ID,
-        { method: 'POST', body: JSON.stringify({ records: batch }) }
-      );
+      await apiCall('https://api.airtable.com/v0/' + BASE_ID + '/' + TXN_TABLE_ID,
+        { method: 'POST', body: JSON.stringify({ records: batch }) });
     }
 
     const auditNote = staffName + ' created ' + txnType + ' stock movement for ' + clientName + ' (' + records.length + ' product(s)) — ' + reason;
     await writeAudit('Success', auditNote, clientId);
+
+    // Refresh inventory data so dropdowns stay accurate
+    let allInv = [], invOffset = null;
+    do {
+      let url = 'https://api.airtable.com/v0/' + BASE_ID + '/' + TRADE_INV_TABLE +
+                '?fields[]=Client&fields[]=Product&fields[]=In%20stock';
+      if (invOffset) url += '&offset=' + invOffset;
+      const data = await apiCall(url);
+      allInv = allInv.concat(data.records);
+      invOffset = data.offset;
+    } while (invOffset);
+    tradeInventory = allInv.map(r => ({
+      clientId:  r.fields['Client']?.[0],
+      productId: r.fields['Product']?.[0],
+      inStock:   r.fields['In stock'] || 0
+    })).filter(r => r.clientId && r.productId);
 
     showStatus('success', '✓ ' + records.length + ' transaction(s) created successfully.');
     document.getElementById('productRows').innerHTML = '';
@@ -344,6 +417,7 @@ async function submitForm() {
     document.getElementById('txnType').value = '';
     document.getElementById('staffName').value = '';
     document.getElementById('reasonForMovement').value = '';
+    showInventoryWarning('');
     addRow();
 
   } catch(e) {
@@ -356,7 +430,7 @@ async function submitForm() {
 
 addRow();
 
-// ─── Pre-fill token from cookie if available ─────────────────────────────────
+// Pre-fill token from cookie
 const saved = getCookie('seven_pat');
 if (saved) document.getElementById('apiToken').value = saved;
 </script>
