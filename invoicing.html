@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SEVEN — Trade Invoicing</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; font-size: 14px; padding: 20px; }
+
+  .top-bar { background: #fff; border-radius: 10px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  .top-bar h1 { font-size: 20px; font-weight: 700; color: #111; }
+  .top-bar p  { font-size: 13px; color: #888; }
+  .top-bar .links { margin-left: auto; display: flex; gap: 16px; }
+  .nav-link { font-size: 13px; color: #7c3aed; text-decoration: none; font-weight: 600; }
+  .nav-link:hover { text-decoration: underline; }
+  .version { font-size: 11px; color: #ccc; }
+
+  .card { background: #fff; border-radius: 10px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+
+  label { display: block; font-weight: 500; margin-bottom: 6px; font-size: 13px; color: #555; }
+  input[type=text], input[type=password], input[type=date] {
+    width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px;
+    font-size: 14px; color: #333; background: #fff;
+  }
+  input:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124,58,237,0.1); }
+
+  .btn { display: inline-block; padding: 9px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+  .btn-primary   { background: #7c3aed; color: #fff; }
+  .btn-primary:hover { background: #6d28d9; }
+  .btn-primary:disabled { background: #c4b5fd; cursor: not-allowed; }
+  .btn-load { background: #7c3aed; color: #fff; border: none; border-radius: 6px; padding: 8px 20px; font-size: 14px; font-weight: 500; cursor: pointer; margin-top: 10px; }
+  .btn-load:hover { background: #6d28d9; }
+
+  /* Status messages */
+  .status { padding: 12px 16px; border-radius: 8px; font-size: 14px; margin-top: 12px; display: none; }
+  .status.success { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; display: block; }
+  .status.error   { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; display: block; }
+  .status.loading { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; display: block; }
+  .status.info    { background: #f5f3ff; color: #5b21b6; border: 1px solid #ddd6fe; display: block; }
+
+  /* Client invoice block */
+  .client-block { background: #fff; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden; }
+  .client-header { background: #f5f3ff; padding: 14px 20px; border-bottom: 2px solid #ede9fe; display: flex; align-items: center; justify-content: space-between; }
+  .client-name { font-size: 16px; font-weight: 700; color: #4c1d95; }
+  .client-count { font-size: 13px; color: #7c3aed; }
+
+  /* Lines table */
+  .lines-table { width: 100%; border-collapse: collapse; }
+  .lines-table th { text-align: left; font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 16px; border-bottom: 1px solid #f3f4f6; }
+  .lines-table td { padding: 10px 16px; border-bottom: 1px solid #f9fafb; font-size: 14px; vertical-align: middle; }
+  .lines-table tr:last-child td { border-bottom: none; }
+  .lines-table tr:hover td { background: #fafafa; }
+  .sku  { font-family: monospace; font-size: 12px; color: #6b7280; }
+  .prod { font-weight: 600; color: #111; }
+  .qty  { text-align: right; font-weight: 600; }
+  .price { text-align: right; color: #374151; }
+  .line-total { text-align: right; font-weight: 700; color: #111; }
+
+  /* Subtotal row */
+  .subtotal-row { background: #f9fafb; border-top: 2px solid #e5e7eb; }
+  .subtotal-row td { padding: 12px 16px; font-weight: 700; font-size: 15px; }
+  .subtotal-label { color: #374151; }
+  .subtotal-amount { text-align: right; color: #111; font-size: 16px; }
+
+  /* Invoice entry */
+  .invoice-entry { padding: 16px 20px; border-top: 1px solid #e5e7eb; background: #fafafa; }
+  .invoice-entry-grid { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty-state { text-align: center; padding: 48px 24px; color: #9ca3af; }
+  .empty-state h2 { font-size: 18px; margin-bottom: 8px; color: #6b7280; }
+
+  #invoicing-section { display: none; }
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="top-bar">
+  <div>
+    <h1>Trade Invoicing</h1>
+    <p>Sold transactions awaiting invoicing</p>
+  </div>
+  <div class="links">
+    <a class="nav-link" href="index.html">← Stock Movement</a>
+    <a class="nav-link" href="dispatch.html">ShipStation Dispatch</a>
+    <span class="version">v1.0</span>
+  </div>
+</div>
+
+<!-- Token -->
+<div class="card" id="token-card">
+  <label for="pat">Airtable API Token</label>
+  <input type="password" id="pat" placeholder="Paste your personal access token here" autocomplete="current-password">
+  <button class="btn-load" onclick="loadData()">Load data</button>
+  <div class="status" id="load-status"></div>
+</div>
+
+<!-- Invoicing section -->
+<div id="invoicing-section">
+  <div id="client-list"></div>
+</div>
+
+<script>
+const BASE       = 'appKSv3xAO9AHTN6g';
+const T_TXN      = 'tblrPpiv1u5B8Ag3c';
+const T_PRODUCTS = 'tblvy0yjEIpAS81Hg';
+const T_CLIENTS  = 'tblHjBtbDzsePZZkT';
+const T_AUDIT    = 'Audit%20Trail';
+const SYSTEM     = 'Trade Invoicing';
+
+let PAT = '';
+let products = {};  // id → fields
+let clients  = {};  // id → name
+
+// ─── Cookie helpers ──────────────────────────────────────────────────────────
+function setCookie(n, v) { document.cookie = n + '=' + encodeURIComponent(v) + '; path=/; SameSite=Strict'; }
+function getCookie(n) { const m = document.cookie.match('(?:^|; )' + n + '=([^;]*)'); return m ? decodeURIComponent(m[1]) : null; }
+
+// ─── API helpers ─────────────────────────────────────────────────────────────
+async function atGet(table, params = {}) {
+  let url = `https://api.airtable.com/v0/${BASE}/${table}`;
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (Array.isArray(v)) v.forEach(i => q.append(k, i));
+    else q.set(k, v);
+  }
+  const qs = q.toString();
+  if (qs) url += '?' + qs;
+  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + PAT } });
+  if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message || `HTTP ${r.status}`); }
+  return r.json();
+}
+
+async function atGetAll(table, params = {}) {
+  let records = [], offset = null;
+  do {
+    const p = { ...params };
+    if (offset) p.offset = offset;
+    const d = await atGet(table, p);
+    records = records.concat(d.records);
+    offset = d.offset || null;
+  } while (offset);
+  return records;
+}
+
+async function atPatch(table, id, fields) {
+  const r = await fetch(`https://api.airtable.com/v0/${BASE}/${table}/${id}`, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + PAT, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields })
+  });
+  if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message || `HTTP ${r.status}`); }
+  return r.json();
+}
+
+async function auditLog(status, notes, clientId = null) {
+  const fields = { 'System': SYSTEM, 'Status': status, 'Notes': notes };
+  if (clientId) fields['Client'] = [clientId];
+  try {
+    await fetch(`https://api.airtable.com/v0/${BASE}/${T_AUDIT}`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + PAT, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ records: [{ fields }] })
+    });
+  } catch(e) { console.warn('Audit log failed', e); }
+}
+
+function fmt(n) { return '€' + Number(n || 0).toFixed(2); }
+
+// ─── Load data ───────────────────────────────────────────────────────────────
+async function loadData() {
+  PAT = document.getElementById('pat').value.trim();
+  if (!PAT) { showMsg('load-status', 'error', 'Please enter your API token.'); return; }
+  setCookie('seven_pat', PAT);
+  showMsg('load-status', 'loading', 'Loading...');
+
+  try {
+    // Load products
+    const prodRecs = await atGetAll(T_PRODUCTS, {
+      'fields[]': ['SKU', 'Name', 'Direct Trade Price (ex VAT)']
+    });
+    products = {};
+    prodRecs.forEach(p => { products[p.id] = p.fields; });
+
+    // Load clients
+    const clientRecs = await atGetAll(T_CLIENTS, {
+      'fields[]': ['Trade Account']
+    });
+    clients = {};
+    clientRecs.forEach(c => { clients[c.id] = c.fields['Trade Account'] || c.id; });
+
+    // Load uninvoiced Sold transactions
+    const txnRecs = await atGetAll(T_TXN, {
+      filterByFormula: "AND({Txn type}='Sold',{Invoice Number}='')",
+      'fields[]': ['Client', 'Product', 'Quantity', 'Txn ID', 'Date']
+    });
+
+    showMsg('load-status', 'success', `Loaded — ${txnRecs.length} transaction(s) awaiting invoicing.`);
+    renderInvoicing(txnRecs);
+
+  } catch(err) {
+    showMsg('load-status', 'error', 'Failed to load: ' + err.message);
+  }
+}
+
+// ─── Render invoicing UI ─────────────────────────────────────────────────────
+function renderInvoicing(txns) {
+  const section = document.getElementById('invoicing-section');
+  const list    = document.getElementById('client-list');
+  list.innerHTML = '';
+  section.style.display = 'block';
+
+  if (txns.length === 0) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <h2>All up to date!</h2>
+        <p>No sold transactions are waiting to be invoiced.</p>
+      </div>`;
+    return;
+  }
+
+  // Group by client
+  const byClient = {};
+  txns.forEach(t => {
+    const cid = t.fields['Client']?.[0];
+    if (!cid) return;
+    if (!byClient[cid]) byClient[cid] = [];
+    byClient[cid].push(t);
+  });
+
+  // Sort clients alphabetically
+  const sortedClients = Object.keys(byClient).sort((a, b) =>
+    (clients[a] || '').localeCompare(clients[b] || ''));
+
+  sortedClients.forEach(clientId => {
+    const txnList    = byClient[clientId];
+    const clientName = clients[clientId] || clientId;
+    const blockId    = 'block-' + clientId;
+
+    // Calculate subtotal
+    let subtotal = 0;
+    txnList.forEach(t => {
+      const prodId = t.fields['Product']?.[0];
+      const price  = products[prodId]?.['Direct Trade Price (ex VAT)'] || 0;
+      const qty    = t.fields['Quantity'] || 0;
+      subtotal += price * qty;
+    });
+
+    // Build lines HTML
+    let linesHtml = '';
+    txnList.forEach(t => {
+      const prodId   = t.fields['Product']?.[0];
+      const prod     = prodId ? products[prodId] : null;
+      const sku      = prod?.SKU || '—';
+      const name     = prod?.Name || 'Unknown product';
+      const qty      = t.fields['Quantity'] || 0;
+      const price    = prod?.['Direct Trade Price (ex VAT)'] || 0;
+      const lineTotal = price * qty;
+      const txnId    = t.fields['Txn ID'] || '';
+      const date     = t.fields['Date'] ? new Date(t.fields['Date']).toLocaleDateString('en-GB') : '—';
+
+      linesHtml += `
+        <tr>
+          <td><span class="sku">${sku}</span></td>
+          <td><span class="prod">${name}</span></td>
+          <td style="color:#9ca3af;font-size:12px;">Txn #${txnId} · ${date}</td>
+          <td class="qty">${qty}</td>
+          <td class="price">${fmt(price)}</td>
+          <td class="line-total">${fmt(lineTotal)}</td>
+        </tr>`;
+    });
+
+    const block = document.createElement('div');
+    block.className = 'client-block';
+    block.id = blockId;
+    block.innerHTML = `
+      <div class="client-header">
+        <span class="client-name">${clientName}</span>
+        <span class="client-count">${txnList.length} line(s)</span>
+      </div>
+      <table class="lines-table">
+        <thead>
+          <tr>
+            <th>SKU</th>
+            <th>Product</th>
+            <th>Reference</th>
+            <th style="text-align:right;">Qty</th>
+            <th style="text-align:right;">Unit price</th>
+            <th style="text-align:right;">Line total</th>
+          </tr>
+        </thead>
+        <tbody>${linesHtml}</tbody>
+        <tfoot>
+          <tr class="subtotal-row">
+            <td colspan="5" class="subtotal-label">Invoice total (ex VAT)</td>
+            <td class="subtotal-amount">${fmt(subtotal)}</td>
+          </tr>
+        </tfoot>
+      </table>
+      <div class="invoice-entry">
+        <div class="invoice-entry-grid">
+          <div>
+            <label for="inv-num-${clientId}">Invoice number</label>
+            <input type="text" id="inv-num-${clientId}" placeholder="e.g. INV-2026-001">
+          </div>
+          <div>
+            <label for="inv-date-${clientId}">Invoice date</label>
+            <input type="date" id="inv-date-${clientId}" value="${today()}">
+          </div>
+          <div>
+            <button class="btn btn-primary" id="btn-${clientId}"
+              onclick="markInvoiced('${clientId}', ${JSON.stringify(txnList.map(t => t.id))})">
+              Mark as invoiced
+            </button>
+          </div>
+        </div>
+        <div class="status" id="status-${clientId}"></div>
+      </div>`;
+
+    list.appendChild(block);
+  });
+}
+
+// ─── Mark as invoiced ────────────────────────────────────────────────────────
+async function markInvoiced(clientId, txnIds) {
+  const invNum  = document.getElementById('inv-num-' + clientId).value.trim();
+  const invDate = document.getElementById('inv-date-' + clientId).value;
+
+  if (!invNum)  { showMsg('status-' + clientId, 'error', 'Please enter an invoice number.'); return; }
+  if (!invDate) { showMsg('status-' + clientId, 'error', 'Please enter an invoice date.'); return; }
+
+  const btn = document.getElementById('btn-' + clientId);
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Saving...';
+  showMsg('status-' + clientId, 'loading', 'Updating records...');
+
+  try {
+    for (const id of txnIds) {
+      await atPatch(T_TXN, id, {
+        'Invoice Number': invNum,
+        'Invoice Date':   invDate
+      });
+    }
+
+    const clientName = clients[clientId] || clientId;
+    await auditLog('Success',
+      `Invoice ${invNum} (${invDate}) marked against ${txnIds.length} Sold transaction(s) for ${clientName}`,
+      clientId);
+
+    // Remove the client block from the UI
+    showMsg('status-' + clientId, 'success', `✅ ${txnIds.length} transaction(s) marked as invoiced — ${invNum}`);
+    setTimeout(() => {
+      const block = document.getElementById('block-' + clientId);
+      if (block) block.style.transition = 'opacity 0.4s';
+      if (block) block.style.opacity = '0';
+      setTimeout(() => { if (block) block.remove(); checkEmpty(); }, 400);
+    }, 1200);
+
+  } catch(err) {
+    await auditLog('Error', `Failed to mark invoice for ${clients[clientId]}: ${err.message}`, clientId);
+    showMsg('status-' + clientId, 'error', '❌ Error: ' + err.message);
+    btn.disabled = false;
+    btn.innerHTML = 'Mark as invoiced';
+  }
+}
+
+function checkEmpty() {
+  const list = document.getElementById('client-list');
+  if (list.children.length === 0) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <h2>All up to date!</h2>
+        <p>No sold transactions are waiting to be invoiced.</p>
+      </div>`;
+  }
+}
+
+function today() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function showMsg(id, type, text) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = 'status ' + type;
+  el.textContent = text;
+}
+
+// Pre-fill token from cookie
+document.getElementById('pat').addEventListener('keydown', e => { if (e.key === 'Enter') loadData(); });
+const saved = getCookie('seven_pat');
+if (saved) { document.getElementById('pat').value = saved; loadData(); }
+</script>
+</body>
+</html>
