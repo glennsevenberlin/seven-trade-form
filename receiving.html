@@ -61,7 +61,7 @@
     <h1>Add Third Party Stock</h1>
     <p>Receive 3rd party vinyl via Discogs ID → Airtable Products + Stock transactions</p>
   </div>
-  <div class="version">v1.11</div>
+  <div class="version">v1.12</div>
 </header>
 
 <div class="container">
@@ -263,8 +263,8 @@ async function fetchImageAsAttachment(imageUrl, token) {
     });
     if (!res.ok) return null;
     var data = await res.json();
-    if (!data.dataUri) return null;
-    return [{ url: data.dataUri, filename: 'cover.jpg' }];
+    if (!data.url) return null;
+    return [{ url: data.url, filename: 'cover.jpg' }];
   } catch(e) {
     console.warn('Image proxy failed:', e);
     return null;
