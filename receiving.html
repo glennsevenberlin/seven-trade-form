@@ -98,7 +98,7 @@
     <h1>Add Third Party Stock</h1>
     <p>Receive 3rd party vinyl via Discogs ID → Airtable Products + Stock transactions</p>
   </div>
-  <div class="version">v1.03</div>
+  <div class="version">v1.05</div>
 </header>
 
 <div class="container">
@@ -280,6 +280,7 @@
     const artist = d.artists && d.artists.length ? stripDisambig(d.artists[0].name) : 'Unknown Artist';
     const title = d.title || '';
     const label = d.labels && d.labels.length ? d.labels[0] : null;
+    const labelName = label ? stripDisambig(label.name) : '';
     const fmt = d.formats && d.formats.length ? d.formats[0] : null;
 
     const barcode = (d.identifiers || []).find(i => i.type === 'Barcode');
@@ -314,7 +315,7 @@
         'Catalog visibility':      'hidden',
         'Tax status':              'taxable',
         'Product type':            'simple',
-        'Brand':                   label ? label.name : '',
+        'Brand':                   labelName,
         ...(gtin ? { 'GTIN/EAC': gtin } : {}),
         'Sales Channels':          ['Online', 'In-Store'],
         'Cost Price (ex VAT)':     costPrice,
@@ -322,7 +323,7 @@
         'In-store only':           ['yes'],
         ...(releasedDate ? { 'Music Release Date': releasedDate } : {}),
         ...(d.master_id ? { 'Master Release ID': String(d.master_id) } : {}),
-        'Record Label':            label ? label.name : '',
+        'Record Label':            labelName,
         'Artist Name':             artist,
         'Label Cat ID':            label ? label.catno : '',
         'Release Title':           title,
@@ -335,6 +336,13 @@
         'Discogs URL':             d.uri || `https://www.discogs.com/release/${d.id}`,
         'Item Type':               'Music - 3rd Party',
         'Distributor':             distributor,
+        'Store Label Status':      'Not Ready',
+        'Weight (kg)':             0.230,
+        'Dimensions (Length)':     31.00,
+        'Dimensions (Width)':      31.00,
+        'Dimensions (Height)':     0.3,
+        'Customs Description':     'Vinyl Record',
+        'Customs Tarrif':          '8523.80.10',
         ...(sku ? { 'SKU': sku } : {})
       },
       imageUrl: image,
@@ -353,7 +361,31 @@
     return data.records && data.records.length ? data.records[0] : null;
   }
 
-  async function createProduct(fields, imageUrl, pat) {
+  async function fetchImageAsAttachment(imageUrl, discogsToken) {
+    if (!imageUrl) return null;
+    try {
+      // Fetch image directly with Discogs auth
+      const res = await fetch(imageUrl, {
+        headers: {
+          'Authorization': `Discogs token=${discogsToken}`,
+          'User-Agent': 'SevenBerlin/1.0'
+        }
+      });
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      const b64 = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result); // full data URL e.g. data:image/jpeg;base64,...
+        r.onerror = reject;
+        r.readAsDataURL(blob);
+      });
+      // Airtable accepts base64 via url field as data URI
+      return [{ url: b64, filename: 'cover.jpg' }];
+    } catch (e) {
+      console.warn('Image fetch failed:', e);
+      return null;
+    }
+  }
     const body = { fields: { ...fields } };
     if (imageUrl) body.fields['Product image'] = [{ url: imageUrl }];
     const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PRODUCTS_TBL}`, {
@@ -440,22 +472,25 @@
         const parsed = parseDiscogs(discogsData, cost, distributor);
         log(`  ✓ Discogs: ${parsed.artist} — ${parsed.title}`, 'success');
 
-        // 2. Upsert Products
+        // 2. Fetch image
+        const imageAttachment = await fetchImageAsAttachment(parsed.imageUrl, discogsToken);
+
+        // 3. Upsert Products
         const existing = await searchProduct(parsed.discogsId, pat);
         let productRecordId, action;
 
         if (existing) {
           productRecordId = existing.id;
-          await updateProduct(productRecordId, parsed.fields, parsed.imageUrl, pat);
+          await updateProduct(productRecordId, parsed.fields, imageAttachment, pat);
           log(`  ✓ Product updated — record ${productRecordId}`, 'success');
           action = 'updated'; updated++;
         } else {
-          productRecordId = await createProduct(parsed.fields, parsed.imageUrl, pat);
+          productRecordId = await createProduct(parsed.fields, imageAttachment, pat);
           log(`  ✓ Product created — record ${productRecordId}`, 'success');
           action = 'created'; created++;
         }
 
-        // 3. Stock transaction
+        // 4. Stock transaction
         await createStockTxn(productRecordId, qty, parsed.artist, parsed.title, distributor, pat);
         log(`  ✓ Stock transaction written — qty: +${qty}`, 'success');
 
