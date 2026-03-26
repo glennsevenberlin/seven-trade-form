@@ -98,7 +98,7 @@
     <h1>Add Third Party Stock</h1>
     <p>Receive 3rd party vinyl via Discogs ID → Airtable Products + Stock transactions</p>
   </div>
-  <div class="version">v1.01</div>
+  <div class="version">v1.02</div>
 </header>
 
 <div class="container">
@@ -319,7 +319,7 @@
         'Sales Channels':          ['Online', 'In-Store'],
         'Cost Price (ex VAT)':     costPrice,
         'SKUGRP':                  'Discogs',
-        'In-store only':           'yes',
+        'In-store only':           ['yes'],
         ...(releasedDate ? { 'Music Release Date': releasedDate } : {}),
         ...(d.master_id ? { 'Master Release ID': String(d.master_id) } : {}),
         'Record Label':            label ? label.name : '',
