@@ -51,7 +51,7 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
-  <p class="version">v1.64</p><a class="nav-link" href="dispatch.html">ShipStation Dispatch →</a>
+  <p class="version">v1.65</p><a class="nav-link" href="dispatch.html">ShipStation Dispatch →</a>
 </div>
 
 <div class="card">
@@ -95,9 +95,9 @@
       <label>Transaction type</label>
       <select id="txnType" onchange="onClientOrTypeChange()">
         <option value="">— Select type —</option>
-        <option value="Shipped">Shipped</option>
+        <option value="Shipped">Ship</option>
         <option value="Sold">Sold</option>
-        <option value="Invoiced">Invoiced</option>
+        <option value="Direct Trade">Direct Trade</option>
       </select>
     </div>
   </div>
@@ -269,7 +269,7 @@ function onClientOrTypeChange() {
     }
     const hasStock = tradeInventory.some(r => r.clientId === clientId && r.inStock > 0);
     if (!hasStock) {
-      showInventoryWarning('⚠️ No stock on record for this client. Make sure Shipped transactions have been entered first.');
+      showInventoryWarning('⚠️ No stock on record for this client. Make sure Ship transactions have been entered first.');
     }
   }
 }
@@ -284,7 +284,6 @@ function buildProductOptions(selectEl, currentValue) {
   let productList = products;
 
   if (txnType === 'Sold' && clientId) {
-    // Only show products with inventory for this client where In Stock > 0
     const stockMap = {};
     tradeInventory.forEach(r => {
       if (r.clientId === clientId && r.inStock > 0) {
@@ -398,14 +397,19 @@ async function submitForm() {
       }
     }
 
-    const fields = {
-      'Client':   [clientId],
-      'Product':  [productId],
-      'Txn type': txnType,
-      'Quantity': qty
-    };
-    if (txnType === 'Invoiced' && invoiceNum) fields['Invoice number'] = invoiceNum;
-    records.push({ fields });
+    if (txnType === 'Direct Trade') {
+      // Create both a Shipped and a Sold record
+      records.push({ fields: { 'Client': [clientId], 'Product': [productId], 'Txn type': 'Shipped', 'Quantity': qty } });
+      records.push({ fields: { 'Client': [clientId], 'Product': [productId], 'Txn type': 'Sold',    'Quantity': qty } });
+    } else {
+        const fields = {
+        'Client':   [clientId],
+        'Product':  [productId],
+        'Txn type': txnType === 'Ship' ? 'Shipped' : txnType,
+        'Quantity': qty
+      };
+      records.push({ fields });
+    }
   });
 
   if (!valid) { showStatus('error', 'Please make sure all rows have a product and a valid quantity.'); return; }
@@ -421,7 +425,8 @@ async function submitForm() {
         { method: 'POST', body: JSON.stringify({ records: batch }) });
     }
 
-    const auditNote = staffName + ' created ' + txnType + ' stock movement for ' + clientName + ' (' + records.length + ' product(s)) — ' + reason;
+    const txnLabel   = txnType === 'Direct Trade' ? 'Direct Trade (Ship + Sold)' : txnType;
+    const auditNote  = staffName + ' created ' + txnLabel + ' stock movement for ' + clientName + ' (' + rows.length + ' product(s)) — ' + reason;
     await writeAudit('Success', auditNote, clientId);
 
     // Refresh inventory data so dropdowns stay accurate
