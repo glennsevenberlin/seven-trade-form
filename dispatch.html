@@ -162,6 +162,15 @@
 </div>
 
 <script>
+// ─── Cookie helpers ──────────────────────────────────────────────────────────
+function setCookie(name, value) {
+  document.cookie = name + '=' + encodeURIComponent(value) + '; path=/; SameSite=Strict';
+}
+function getCookie(name) {
+  const m = document.cookie.match('(?:^|; )' + name + '=([^;]*)');
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 // ─── Config ─────────────────────────────────────────────────────────────────
 const BASE        = 'appKSv3xAO9AHTN6g';
 const T_TXN       = 'tblrPpiv1u5B8Ag3c';
@@ -235,6 +244,7 @@ async function auditLog(status, notes, clientId = null) {
 async function loadData() {
   PAT = document.getElementById('pat').value.trim();
   if (!PAT) { showMsg('token-msg', 'error', 'Please enter your API token.'); return; }
+  setCookie('seven_pat', PAT);
 
   document.getElementById('loading-section').style.display = 'block';
   document.getElementById('dispatch-section').style.display = 'none';
@@ -540,6 +550,13 @@ function showMsg(id, type, text) {
 document.getElementById('pat').addEventListener('keydown', e => {
   if (e.key === 'Enter') loadData();
 });
+
+// Auto-load if cookie exists
+const saved = getCookie('seven_pat');
+if (saved) {
+  document.getElementById('pat').value = saved;
+  loadData();
+}
 </script>
 </body>
 </html>
