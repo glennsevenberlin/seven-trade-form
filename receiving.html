@@ -26,10 +26,12 @@
   input[type=text], input[type=password], input[type=number] { width: 100%; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: 14px; font-family: var(--font); }
   input:focus { outline: 2px solid var(--accent2); border-color: transparent; }
   .lines-header { display: grid; grid-template-columns: 40px 1fr 110px 130px 36px; gap: 8px; padding: 0 0 6px 0; border-bottom: 2px solid var(--border); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
-  .line-row { display: grid; grid-template-columns: 40px 1fr 110px 130px 36px; gap: 8px; padding: 8px 0; border-bottom: 1px solid #f0f0f0; align-items: center; }
+  .line-row { display: grid; grid-template-columns: 40px 1fr 110px 130px 36px; gap: 8px; padding: 8px 0 4px 0; border-bottom: 1px solid #f0f0f0; align-items: center; flex-wrap: wrap; }
   .line-num { font-size: 12px; color: var(--muted); font-weight: 600; }
   .btn-remove { background: none; border: 1px solid #ddd; border-radius: 4px; width: 30px; height: 30px; cursor: pointer; color: var(--muted); font-size: 16px; display: flex; align-items: center; justify-content: center; }
   .btn-remove:hover { background: #fff0f0; border-color: var(--error); color: var(--error); }
+  .zero-qty-warning { grid-column: 1 / -1; background: #fff8e1; border: 1px solid #ffe082; border-radius: 4px; padding: 7px 10px; font-size: 12px; color: #7c5e00; display: flex; align-items: center; gap: 8px; }
+  .zero-qty-warning input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--warning); flex-shrink: 0; }
   .actions { display: flex; gap: 10px; margin-top: 14px; }
   .btn { padding: 9px 18px; border-radius: var(--radius); border: none; font-size: 14px; font-family: var(--font); cursor: pointer; font-weight: 500; }
   .btn-secondary { background: white; border: 1px solid var(--border); color: var(--text); }
@@ -61,7 +63,7 @@
     <h1>Add Third Party Stock</h1>
     <p>Receive 3rd party vinyl via Discogs ID → Airtable Products + Stock transactions</p>
   </div>
-  <div class="version">v1.15</div>
+  <div class="version">v1.16</div>
 </header>
 
 <div class="container">
@@ -341,15 +343,46 @@ async function submitForm() {
   if (!distributor) { alert('Please enter a distributor name.'); return; }
 
   var batch = [];
+  var needsConfirmation = false;
+
   for (var i = 0; i < lines.length; i++) {
     var id = lines[i];
-    var did = document.getElementById('did-' + id).value.trim().replace(/[\[\]r]/gi, '');
-    var qty = parseInt(document.getElementById('qty-' + id).value);
-    var cost = parseFloat(document.getElementById('cost-' + id).value);
+    var did  = document.getElementById('did-' + id).value.trim().replace(/[\[\]r]/gi, '');
+    var qty  = parseInt(document.getElementById('qty-' + id).value) || 0;
+    var cost = parseFloat(document.getElementById('cost-' + id).value) || 0;
     if (!did) continue;
-    if (!qty || qty < 1) { alert('Line ' + (i + 1) + ': please enter a valid quantity.'); return; }
     if (isNaN(cost) || cost < 0) { alert('Line ' + (i + 1) + ': please enter a valid cost price.'); return; }
+
+    // Zero qty handling — show warning and require confirmation
+    if (qty === 0) {
+      var warningId = 'zero-warn-' + id;
+      var checkId   = 'zero-check-' + id;
+      if (!document.getElementById(warningId)) {
+        var row = document.getElementById('row-' + id);
+        var warn = document.createElement('div');
+        warn.className = 'zero-qty-warning';
+        warn.id = warningId;
+        warn.innerHTML =
+          '<input type="checkbox" id="' + checkId + '">' +
+          '<label for="' + checkId + '">⚠ Zero qty — this will refresh Discogs data only, no stock will be added. Tick to confirm.</label>';
+        row.after(warn);
+      }
+      if (!document.getElementById(checkId).checked) {
+        needsConfirmation = true;
+        continue;
+      }
+    } else {
+      // Remove warning if qty was changed back to non-zero
+      var existingWarn = document.getElementById('zero-warn-' + id);
+      if (existingWarn) existingWarn.remove();
+    }
+
     batch.push({ did: did, qty: qty, cost: cost });
+  }
+
+  if (needsConfirmation) {
+    alert('Please confirm all zero-quantity lines before submitting.');
+    return;
   }
   if (!batch.length) { alert('Please add at least one stock line.'); return; }
 
@@ -381,8 +414,13 @@ async function submitForm() {
       log('  ✓ Product ' + action + ' — record ' + productRecordId, 'success');
       if (action === 'created') created++; else updated++;
 
-      await createStockTxn(productRecordId, item.qty, parsed.artist, parsed.title, distributor, pat);
-      log('  ✓ Stock transaction written — qty: +' + item.qty, 'success');
+      // 3. Stock transaction — skip if qty is zero (data refresh only)
+      if (item.qty > 0) {
+        await createStockTxn(productRecordId, item.qty, parsed.artist, parsed.title, distributor, pat);
+        log('  ✓ Stock transaction written — qty: +' + item.qty, 'success');
+      } else {
+        log('  ✓ Discogs data refreshed — no stock transaction (qty was 0)', 'success');
+      }
 
       await audit('Success', [
         'Product ' + action + ': ' + parsed.artist + ' — ' + parsed.title,
