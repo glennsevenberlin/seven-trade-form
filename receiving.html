@@ -63,7 +63,7 @@
     <h1>Add Third Party Stock</h1>
     <p>Receive 3rd party vinyl via Discogs ID → Airtable Products + Stock transactions</p>
   </div>
-  <div class="version">v1.17</div>
+  <div class="version">v1.18</div>
 </header>
 
 <div class="container">
@@ -440,6 +440,30 @@ async function submitForm() {
   btn.disabled = false;
   btn.textContent = 'Submit batch';
   document.getElementById('newBatchContainer').style.display = 'block';
+}
+
+async function fetchCredentials() {
+  try {
+    var res = await fetch('https://seven.berlin/discogs/credentials.php');
+    if (res.status === 403) {
+      document.getElementById('credStatus').innerHTML =
+        '<span style="color:var(--error)">⚠ Access restricted — this form can only be used from the SEVEN office network.</span>';
+      document.getElementById('submitBtn').disabled = true;
+      return false;
+    }
+    if (!res.ok) throw new Error('Server error ' + res.status);
+    var data = await res.json();
+    _pat          = data.airtablePat;
+    _discogsToken = data.discogsToken;
+    document.getElementById('credStatus').innerHTML =
+      '<span style="color:var(--success)">✓ Credentials loaded</span>';
+    return true;
+  } catch(e) {
+    document.getElementById('credStatus').innerHTML =
+      '<span style="color:var(--error)">⚠ Could not load credentials: ' + e.message + '</span>';
+    document.getElementById('submitBtn').disabled = true;
+    return false;
+  }
 }
 
 // Initialise
