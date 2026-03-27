@@ -21,12 +21,11 @@
   .container { max-width: 1000px; margin: 24px auto; padding: 0 16px; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
   .card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 14px; }
-  .creds-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: var(--muted); }
-  input[type=text], input[type=password], input[type=number] { width: 100%; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: 14px; font-family: var(--font); }
+  input[type=text], input[type=number] { width: 100%; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: 14px; font-family: var(--font); }
   input:focus { outline: 2px solid var(--accent2); border-color: transparent; }
+  label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: var(--muted); }
   .lines-header { display: grid; grid-template-columns: 40px 1fr 110px 130px 36px; gap: 8px; padding: 0 0 6px 0; border-bottom: 2px solid var(--border); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
-  .line-row { display: grid; grid-template-columns: 40px 1fr 110px 130px 36px; gap: 8px; padding: 8px 0 4px 0; border-bottom: 1px solid #f0f0f0; align-items: center; flex-wrap: wrap; }
+  .line-row { display: grid; grid-template-columns: 40px 1fr 110px 130px 36px; gap: 8px; padding: 8px 0 4px 0; border-bottom: 1px solid #f0f0f0; align-items: center; }
   .line-num { font-size: 12px; color: var(--muted); font-weight: 600; }
   .btn-remove { background: none; border: 1px solid #ddd; border-radius: 4px; width: 30px; height: 30px; cursor: pointer; color: var(--muted); font-size: 16px; display: flex; align-items: center; justify-content: center; }
   .btn-remove:hover { background: #fff0f0; border-color: var(--error); color: var(--error); }
@@ -39,8 +38,6 @@
   .btn-primary { background: var(--accent); color: white; }
   .btn-primary:hover { background: #2d2d4e; }
   .btn-primary:disabled { background: #999; cursor: not-allowed; }
-  .cred-status { font-size: 11px; margin-top: 4px; }
-  .cred-status.saved { color: var(--success); }
   #log { display: none; }
   .log-entries { background: #1a1a2e; border-radius: var(--radius); padding: 14px; font-family: 'Courier New', monospace; font-size: 12px; max-height: 360px; overflow-y: auto; }
   .log-entry { padding: 2px 0; line-height: 1.6; }
@@ -67,7 +64,8 @@
 </header>
 
 <div class="container">
-  <div class="card" id="credCard">
+
+  <div class="card">
     <h2>Credentials</h2>
     <div id="credStatus" style="font-size:13px;color:var(--muted);">
       <span class="spinner"></span> Fetching credentials from server…
@@ -98,46 +96,65 @@
     <div style="font-size:13px;font-weight:600;margin-bottom:10px;">Processing log</div>
     <div class="log-entries" id="logEntries"></div>
     <div class="summary" id="summary"></div>
-    <div style="margin-top:14px;" id="newBatchContainer" style="display:none;">
+    <div style="margin-top:14px;display:none;" id="newBatchContainer">
       <button class="btn btn-primary" id="newBatchBtn">+ Start new batch</button>
     </div>
   </div>
+
 </div>
 
 <script>
-const BASE_ID = 'appKSv3xAO9AHTN6g';
-const PRODUCTS_TBL = 'tblvy0yjEIpAS81Hg';
-const AUDIT_TBL = 'tbl8fC3AoyShfqvm8';
+var BASE_ID      = 'appKSv3xAO9AHTN6g';
+var PRODUCTS_TBL = 'tblvy0yjEIpAS81Hg';
+var AUDIT_TBL    = 'tbl8fC3AoyShfqvm8';
 
-let lines = [];
-let lineId = 0;
+var _pat          = '';
+var _discogsToken = '';
+var lines         = [];
+var lineId        = 0;
 
-function getPat() { return document.getElementById('airtablePat').value.trim() || sessionStorage.getItem('at_pat') || ''; }
-function getDiscogsToken() { return document.getElementById('discogsToken').value.trim() || sessionStorage.getItem('discogs_token') || ''; }
+function getPat()          { return _pat; }
+function getDiscogsToken() { return _discogsToken; }
 
-function saveCreds() {
-  const pat = document.getElementById('airtablePat').value.trim();
-  const tok = document.getElementById('discogsToken').value.trim();
-  if (pat) { sessionStorage.setItem('at_pat', pat); document.getElementById('patStatus').textContent = '✓ Saved for this session'; document.getElementById('patStatus').className = 'cred-status saved'; }
-  if (tok) { sessionStorage.setItem('discogs_token', tok); document.getElementById('discogsStatus').textContent = '✓ Saved for this session'; document.getElementById('discogsStatus').className = 'cred-status saved'; }
+// ── Credentials ───────────────────────────────────────────────
+async function fetchCredentials() {
+  try {
+    var res = await fetch('https://seven.berlin/discogs/credentials.php');
+    if (res.status === 403) {
+      document.getElementById('credStatus').innerHTML =
+        '<span style="color:var(--error)">⚠ Access restricted — this form can only be used from the SEVEN office network.</span>';
+      document.getElementById('submitBtn').disabled = true;
+      return;
+    }
+    if (!res.ok) throw new Error('Server error ' + res.status);
+    var data      = await res.json();
+    _pat          = data.airtablePat;
+    _discogsToken = data.discogsToken;
+    document.getElementById('credStatus').innerHTML =
+      '<span style="color:var(--success)">✓ Credentials loaded</span>';
+  } catch(e) {
+    document.getElementById('credStatus').innerHTML =
+      '<span style="color:var(--error)">⚠ Could not load credentials: ' + e.message + '</span>';
+    document.getElementById('submitBtn').disabled = true;
+  }
 }
 
+// ── Lines ─────────────────────────────────────────────────────
 function addLine() {
-  var id = ++lineId;
-  lines.push(id);
-  appendLine(id);
+  lines.push(++lineId);
+  appendLine(lineId);
   updateLineNumbers();
 }
 
 function appendLine(id) {
-  var c = document.getElementById('linesContainer');
+  var c   = document.getElementById('linesContainer');
   var row = document.createElement('div');
   row.className = 'line-row';
-  row.id = 'row-' + id;
+  row.id        = 'row-' + id;
   row.innerHTML =
     '<div class="line-num" id="num-' + id + '"></div>' +
     '<div><input type="text" id="did-' + id + '" placeholder="e.g. 12345678" style="font-family:monospace"></div>' +
-    '<div><input type="number" id="qty-' + id + '" placeholder="0" min="1" step="1"></div>' +
+    '<div><input type="number" id="qty-' + id + '" placeholder="0" min="0" step="1"></div>' +
     '<div><input type="number" id="cost-' + id + '" placeholder="0.00" min="0" step="0.01"></div>' +
     '<div><button class="btn-remove" data-id="' + id + '">×</button></div>';
   row.querySelector('.btn-remove').addEventListener('click', function() { removeLine(id); });
@@ -148,6 +165,8 @@ function removeLine(id) {
   lines = lines.filter(function(l) { return l !== id; });
   var row = document.getElementById('row-' + id);
   if (row) row.remove();
+  var warn = document.getElementById('zero-warn-' + id);
+  if (warn) warn.remove();
   updateLineNumbers();
 }
 
@@ -158,16 +177,12 @@ function updateLineNumbers() {
   });
 }
 
-function renderLines() {
-  document.getElementById('linesContainer').innerHTML = '';
-  lines.forEach(function(id) { appendLine(id); });
-  updateLineNumbers();
-}
-
-function showLog() { document.getElementById('log').style.display = 'block'; }
+// ── Logging ───────────────────────────────────────────────────
+function showLog()  { document.getElementById('log').style.display = 'block'; }
 function clearLog() { document.getElementById('logEntries').innerHTML = ''; document.getElementById('summary').innerHTML = ''; }
+
 function log(msg, type) {
-  var el = document.getElementById('logEntries');
+  var el  = document.getElementById('logEntries');
   var div = document.createElement('div');
   div.className = 'log-entry ' + (type || 'info');
   div.innerHTML = msg;
@@ -175,6 +190,7 @@ function log(msg, type) {
   el.scrollTop = el.scrollHeight;
 }
 
+// ── Audit Trail ───────────────────────────────────────────────
 async function audit(status, notes, pat) {
   try {
     await fetch('https://api.airtable.com/v0/' + BASE_ID + '/' + AUDIT_TBL, {
@@ -185,6 +201,7 @@ async function audit(status, notes, pat) {
   } catch(e) { console.warn('Audit failed:', e); }
 }
 
+// ── Discogs API ───────────────────────────────────────────────
 async function fetchDiscogs(releaseId, token) {
   var res = await fetch('https://api.discogs.com/releases/' + releaseId, {
     headers: { 'Authorization': 'Discogs token=' + token, 'User-Agent': 'SevenBerlin/1.0' }
@@ -196,87 +213,85 @@ async function fetchDiscogs(releaseId, token) {
 function stripDisambig(n) { return n.replace(/\s*\(\d+\)$/, '').trim(); }
 
 function parseDiscogs(d, costPrice, distributor) {
-  var artist = d.artists && d.artists.length ? stripDisambig(d.artists[0].name) : 'Unknown Artist';
-  var title = d.title || '';
-  var label = d.labels && d.labels.length ? d.labels[0] : null;
+  var artist    = d.artists && d.artists.length ? stripDisambig(d.artists[0].name) : 'Unknown Artist';
+  var title     = d.title || '';
+  var label     = d.labels && d.labels.length ? d.labels[0] : null;
   var labelName = label ? stripDisambig(label.name) : '';
-  var fmt = d.formats && d.formats.length ? d.formats[0] : null;
-  var barcode = (d.identifiers || []).find(function(i) { return i.type === 'Barcode'; });
-  var sku = barcode ? barcode.value : (label ? label.catno : '');
-  var gtin = barcode ? barcode.value : '';
+  var fmt       = d.formats && d.formats.length ? d.formats[0] : null;
+  var barcode   = (d.identifiers || []).find(function(i) { return i.type === 'Barcode'; });
+  var sku       = barcode ? barcode.value : (label ? label.catno : '');
+  var gtin      = barcode ? barcode.value : '';
   var tracklist = (d.tracklist || []).map(function(t) { return t.position + '. ' + t.title; }).join('\n');
-  var fmtName = fmt ? fmt.name : '';
-  var fmtDescs = fmt && fmt.descriptions ? fmt.descriptions.join(', ') : '';
+  var fmtName   = fmt ? fmt.name : '';
+  var fmtDescs  = fmt && fmt.descriptions ? fmt.descriptions.join(', ') : '';
   var productDesc = [
     fmtName && fmtDescs ? fmtName + ', ' + fmtDescs : (fmtName || fmtDescs),
     d.genres && d.genres.length ? 'Genre: ' + d.genres.join(', ') : '',
     d.year ? 'Year: ' + d.year : ''
   ].filter(Boolean).join('\n');
-  var image = d.images && d.images.length ? d.images[0].uri : null;
+  var image        = d.images && d.images.length ? d.images[0].uri : null;
   var releasedDate = d.released ? (d.released.length === 4 ? d.released + '-01-01' : d.released) : null;
 
   var fields = {
-    'Discogs ID': String(d.id),
-    'Name': artist + ' — ' + title,
+    'Discogs ID':                String(d.id),
+    'Name':                      artist + ' — ' + title,
     'Product short description': tracklist,
-    'Product description': productDesc,
-    'Categories': ['Other Labels'],
-    'Catalog visibility': 'hidden',
-    'Tax status': 'taxable',
-    'Product type': 'simple',
-    'Brand': labelName,
-    'Sales Channels': ['Online', 'In-Store'],
-    'Cost Price (ex VAT)': costPrice,
-    'SKUGRP': 'Discogs',
-    'In-store only': ['yes'],
-    'Record Label': labelName,
-    'Artist Name': artist,
-    'Label Cat ID': label ? label.catno : '',
-    'Release Title': title,
-    'Year of Release': d.year ? String(d.year) : '',
-    'Genre': (d.genres || []).join(', '),
-    'Style': (d.styles || []).join(', '),
-    'Format': fmtName,
-    'Format Details': fmtDescs,
-    'Track List': tracklist,
-    'Discogs URL': d.uri || 'https://www.discogs.com/release/' + d.id,
-    'Item Type': 'Music - 3rd Party',
-    'Distributor': distributor,
-    'Store Label Status': 'Not Ready',
-    'Weight (kg)': 0.230,
-    'Dimensions (Length)': 31.00,
-    'Dimensions (Width)': 31.00,
-    'Dimensions (Height)': 0.3,
-    'Customs Description': 'Vinyl Record',
-    'Customs Tarrif': '8523.80.10'
+    'Product description':       productDesc,
+    'Categories':                ['Other Labels'],
+    'Catalog visibility':        'hidden',
+    'Tax status':                'taxable',
+    'Product type':              'simple',
+    'Brand':                     labelName,
+    'Sales Channels':            ['Online', 'In-Store'],
+    'Cost Price (ex VAT)':       costPrice,
+    'SKUGRP':                    'Discogs',
+    'In-store only':             ['yes'],
+    'Record Label':              labelName,
+    'Artist Name':               artist,
+    'Label Cat ID':              label ? label.catno : '',
+    'Release Title':             title,
+    'Year of Release':           d.year ? String(d.year) : '',
+    'Genre':                     (d.genres || []).join(', '),
+    'Style':                     (d.styles || []).join(', '),
+    'Format':                    fmtName,
+    'Format Details':            fmtDescs,
+    'Track List':                tracklist,
+    'Discogs URL':               d.uri || 'https://www.discogs.com/release/' + d.id,
+    'Item Type':                 'Music - 3rd Party',
+    'Distributor':               distributor,
+    'Store Label Status':        'Not Ready',
+    'Weight (kg)':               0.230,
+    'Dimensions (Length)':       31.00,
+    'Dimensions (Width)':        31.00,
+    'Dimensions (Height)':       0.3,
+    'Customs Description':       'Vinyl Record',
+    'Customs Tarrif':            '8523.80.10'
   };
-  if (d.lowest_price != null) fields['Regular Price'] = d.lowest_price;
-  if (gtin) fields['GTIN/EAC'] = gtin;
-  if (releasedDate) fields['Music Release Date'] = releasedDate;
-  if (d.master_id) fields['Master Release ID'] = String(d.master_id);
-  if (sku) fields['SKU'] = sku;
+  if (d.lowest_price != null) fields['Regular Price']      = d.lowest_price;
+  if (gtin)                   fields['GTIN/EAC']           = gtin;
+  if (releasedDate)           fields['Music Release Date'] = releasedDate;
+  if (d.master_id)            fields['Master Release ID']  = String(d.master_id);
+  if (sku)                    fields['SKU']                = sku;
 
   return { discogsId: String(d.id), fields: fields, imageUrl: image, artist: artist, title: title };
 }
 
-async function fetchImageAsAttachment(imageUrl, token) {
+// ── Image proxy ───────────────────────────────────────────────
+async function fetchImageAsAttachment(imageUrl) {
   if (!imageUrl) return null;
   try {
-    var proxyUrl = 'https://seven.berlin/discogs/image-proxy.php?url=' + encodeURIComponent(imageUrl);
-    var res = await fetch(proxyUrl);
+    var res = await fetch('https://seven.berlin/discogs/image-proxy.php?url=' + encodeURIComponent(imageUrl));
     if (!res.ok) return null;
     var data = await res.json();
     if (!data.url) return null;
     return [{ url: data.url, filename: 'cover.jpg' }];
-  } catch(e) {
-    console.warn('Image proxy failed:', e);
-    return null;
-  }
+  } catch(e) { console.warn('Image proxy failed:', e); return null; }
 }
 
+// ── Airtable helpers ──────────────────────────────────────────
 async function searchProduct(discogsId, pat) {
   var filter = encodeURIComponent('{Discogs ID} = "' + discogsId + '"');
-  var res = await fetch('https://api.airtable.com/v0/' + BASE_ID + '/' + PRODUCTS_TBL + '?filterByFormula=' + filter + '&maxRecords=1', {
+  var res    = await fetch('https://api.airtable.com/v0/' + BASE_ID + '/' + PRODUCTS_TBL + '?filterByFormula=' + filter + '&maxRecords=1', {
     headers: { 'Authorization': 'Bearer ' + pat }
   });
   if (!res.ok) throw new Error('Airtable search failed (' + res.status + ')');
@@ -285,96 +300,83 @@ async function searchProduct(discogsId, pat) {
 }
 
 async function upsertProduct(existing, fields, imageAttachment, pat) {
-  var body = { fields: Object.assign({}, fields) };
+  var body   = { fields: Object.assign({}, fields) };
   if (imageAttachment) body.fields['Product image'] = imageAttachment;
-  var url, method;
-  if (existing) {
-    url = 'https://api.airtable.com/v0/' + BASE_ID + '/' + PRODUCTS_TBL + '/' + existing.id;
-    method = 'PATCH';
-  } else {
-    url = 'https://api.airtable.com/v0/' + BASE_ID + '/' + PRODUCTS_TBL;
-    method = 'POST';
-  }
-  var res = await fetch(url, {
+  var url    = existing
+    ? 'https://api.airtable.com/v0/' + BASE_ID + '/' + PRODUCTS_TBL + '/' + existing.id
+    : 'https://api.airtable.com/v0/' + BASE_ID + '/' + PRODUCTS_TBL;
+  var method = existing ? 'PATCH' : 'POST';
+  var res    = await fetch(url, {
     method: method,
     headers: { 'Authorization': 'Bearer ' + pat, 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
   if (!res.ok) { var e = await res.json(); throw new Error(e.error && e.error.message ? e.error.message : 'Product save failed (' + res.status + ')'); }
-  var data = await res.json();
-  return data.id;
+  return (await res.json()).id;
 }
 
 async function createStockTxn(productRecordId, qty, artist, title, distributor, pat) {
-  var body = { fields: {
-    'Product': [productRecordId],
-    'Stock transaction': qty,
-    'User': 'DiscogsSys',
-    'Comment': 'Stock received — ' + artist + ' — ' + title + ' from ' + distributor
-  }};
   var res = await fetch('https://api.airtable.com/v0/' + BASE_ID + '/Stock%20transactions', {
     method: 'POST',
     headers: { 'Authorization': 'Bearer ' + pat, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify({ fields: {
+      'Product':           [productRecordId],
+      'Stock transaction': qty,
+      'User':              'DiscogsSys',
+      'Comment':           'Stock received — ' + artist + ' — ' + title + ' from ' + distributor
+    }})
   });
   if (!res.ok) { var e = await res.json(); throw new Error(e.error && e.error.message ? e.error.message : 'Stock txn failed (' + res.status + ')'); }
 }
 
 function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
 
+// ── Submit ────────────────────────────────────────────────────
 async function submitForm() {
-  var pat = getPat();
+  var pat          = getPat();
   var discogsToken = getDiscogsToken();
-  var distributor = document.getElementById('distributor').value.trim();
-  if (!pat || !discogsToken) { alert('Credentials not loaded. Please make sure you are on the SEVEN office network.'); return; }
-  if (!distributor) { alert('Please enter a distributor name.'); return; }
+  var distributor  = document.getElementById('distributor').value.trim();
 
-  var batch = [];
+  if (!pat || !discogsToken) { alert('Credentials not loaded. Please make sure you are on the SEVEN office network.'); return; }
+  if (!distributor)          { alert('Please enter a distributor name.'); return; }
+
+  var batch             = [];
   var needsConfirmation = false;
 
   for (var i = 0; i < lines.length; i++) {
-    var id = lines[i];
-    var did  = document.getElementById('did-' + id).value.trim().replace(/[\[\]r]/gi, '');
-    var qty  = parseInt(document.getElementById('qty-' + id).value) || 0;
+    var id   = lines[i];
+    var did  = document.getElementById('did-'  + id).value.trim().replace(/[\[\]r]/gi, '');
+    var qty  = parseInt(document.getElementById('qty-'  + id).value) || 0;
     var cost = parseFloat(document.getElementById('cost-' + id).value) || 0;
     if (!did) continue;
     if (isNaN(cost) || cost < 0) { alert('Line ' + (i + 1) + ': please enter a valid cost price.'); return; }
 
-    // Zero qty handling — show warning and require confirmation
     if (qty === 0) {
       var warningId = 'zero-warn-' + id;
       var checkId   = 'zero-check-' + id;
       if (!document.getElementById(warningId)) {
-        var row = document.getElementById('row-' + id);
+        var row  = document.getElementById('row-' + id);
         var warn = document.createElement('div');
         warn.className = 'zero-qty-warning';
-        warn.id = warningId;
+        warn.id        = warningId;
         warn.innerHTML =
           '<input type="checkbox" id="' + checkId + '">' +
           '<label for="' + checkId + '">⚠ Zero qty — this will refresh Discogs data only, no stock will be added. Tick to confirm.</label>';
         row.after(warn);
       }
-      if (!document.getElementById(checkId).checked) {
-        needsConfirmation = true;
-        continue;
-      }
+      if (!document.getElementById(checkId).checked) { needsConfirmation = true; continue; }
     } else {
-      // Remove warning if qty was changed back to non-zero
       var existingWarn = document.getElementById('zero-warn-' + id);
       if (existingWarn) existingWarn.remove();
     }
-
     batch.push({ did: did, qty: qty, cost: cost });
   }
 
-  if (needsConfirmation) {
-    alert('Please confirm all zero-quantity lines before submitting.');
-    return;
-  }
-  if (!batch.length) { alert('Please add at least one stock line.'); return; }
+  if (needsConfirmation) { alert('Please confirm all zero-quantity lines before submitting.'); return; }
+  if (!batch.length)     { alert('Please add at least one stock line.'); return; }
 
   var btn = document.getElementById('submitBtn');
-  btn.disabled = true;
+  btn.disabled    = true;
   btn.textContent = 'Processing…';
   clearLog();
   showLog();
@@ -389,19 +391,17 @@ async function submitForm() {
     var item = batch[i];
     log('<span class="spinner"></span> Line ' + (i + 1) + '/' + batch.length + ' — Discogs ID: ' + item.did, 'info');
     try {
-      var discogsData = await fetchDiscogs(item.did, discogsToken);
-      var parsed = parseDiscogs(discogsData, item.cost, distributor);
+      var discogsData     = await fetchDiscogs(item.did, discogsToken);
+      var parsed          = parseDiscogs(discogsData, item.cost, distributor);
       log('  ✓ Discogs: ' + parsed.artist + ' — ' + parsed.title, 'success');
 
-      var imageAttachment = await fetchImageAsAttachment(parsed.imageUrl, discogsToken);
-
-      var existing = await searchProduct(parsed.discogsId, pat);
-      var action = existing ? 'updated' : 'created';
+      var imageAttachment = await fetchImageAsAttachment(parsed.imageUrl);
+      var existing        = await searchProduct(parsed.discogsId, pat);
+      var action          = existing ? 'updated' : 'created';
       var productRecordId = await upsertProduct(existing, parsed.fields, imageAttachment, pat);
       log('  ✓ Product ' + action + ' — record ' + productRecordId, 'success');
       if (action === 'created') created++; else updated++;
 
-      // 3. Stock transaction — skip if qty is zero (data refresh only)
       if (item.qty > 0) {
         await createStockTxn(productRecordId, item.qty, parsed.artist, parsed.title, distributor, pat);
         log('  ✓ Stock transaction written — qty: +' + item.qty, 'success');
@@ -429,51 +429,29 @@ async function submitForm() {
     if (i < batch.length - 1) await sleep(300);
   }
 
-  log('─────────────────────────────', 'muted');
+  log('─────────────────────────────────', 'muted');
   log('Batch complete — ' + ok + ' OK, ' + errs + ' error(s)', ok > 0 && errs === 0 ? 'success' : 'info');
-  await audit(errs > 0 ? 'Warning' : 'Success', 'Batch complete — ' + ok + ' OK, ' + errs + ' errors — ' + created + ' created, ' + updated + ' updated — Distributor: ' + distributor, pat);
+  await audit(errs > 0 ? 'Warning' : 'Success',
+    'Batch complete — ' + ok + ' OK, ' + errs + ' errors — ' + created + ' created, ' + updated + ' updated — Distributor: ' + distributor, pat);
 
   var summary = document.getElementById('summary');
-  if (ok) summary.innerHTML += '<span class="summary-pill pill-success">✓ ' + ok + ' processed (' + created + ' new, ' + updated + ' updated)</span>';
+  if (ok)   summary.innerHTML += '<span class="summary-pill pill-success">✓ ' + ok + ' processed (' + created + ' new, ' + updated + ' updated)</span>';
   if (errs) summary.innerHTML += '<span class="summary-pill pill-error">✗ ' + errs + ' error(s)</span>';
 
-  btn.disabled = false;
+  btn.disabled    = false;
   btn.textContent = 'Submit batch';
   document.getElementById('newBatchContainer').style.display = 'block';
 }
 
-async function fetchCredentials() {
-  try {
-    var res = await fetch('https://seven.berlin/discogs/credentials.php');
-    if (res.status === 403) {
-      document.getElementById('credStatus').innerHTML =
-        '<span style="color:var(--error)">⚠ Access restricted — this form can only be used from the SEVEN office network.</span>';
-      document.getElementById('submitBtn').disabled = true;
-      return false;
-    }
-    if (!res.ok) throw new Error('Server error ' + res.status);
-    var data = await res.json();
-    _pat          = data.airtablePat;
-    _discogsToken = data.discogsToken;
-    document.getElementById('credStatus').innerHTML =
-      '<span style="color:var(--success)">✓ Credentials loaded</span>';
-    return true;
-  } catch(e) {
-    document.getElementById('credStatus').innerHTML =
-      '<span style="color:var(--error)">⚠ Could not load credentials: ' + e.message + '</span>';
-    document.getElementById('submitBtn').disabled = true;
-    return false;
-  }
-}
-
-// Initialise
+// ── Initialise ────────────────────────────────────────────────
 document.getElementById('addLineBtn').addEventListener('click', addLine);
 document.getElementById('submitBtn').addEventListener('click', submitForm);
 document.getElementById('newBatchBtn').addEventListener('click', function() {
-  lines = []; lineId = 0;
-  document.getElementById('distributor').value = '';
+  lines  = [];
+  lineId = 0;
+  document.getElementById('distributor').value       = '';
   document.getElementById('linesContainer').innerHTML = '';
-  document.getElementById('log').style.display = 'none';
+  document.getElementById('log').style.display        = 'none';
   document.getElementById('newBatchContainer').style.display = 'none';
   addLine(); addLine(); addLine();
   window.scrollTo({ top: 0, behavior: 'smooth' });
