@@ -14,7 +14,7 @@
   .nav-link { font-size: 13px; color: #7c3aed; text-decoration: none; font-weight: 600; }
   .nav-link:hover { text-decoration: underline; }
   label { display: block; font-weight: 500; margin-bottom: 6px; font-size: 13px; color: #555; }
-  select, input[type="text"], input[type="number"], input[type="password"] {
+  select, input[type="text"], input[type="number"] {
     width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px;
     font-size: 14px; color: #333; background: #fff; appearance: none;
   }
@@ -42,8 +42,6 @@
   .invoice-col.visible { display: table-cell; }
   .qty-col { width: 90px; }
   .remove-col { width: 40px; }
-  .load-btn { background: #7c3aed; color: #fff; border: none; border-radius: 6px; padding: 8px 20px; font-size: 14px; font-weight: 500; cursor: pointer; margin-top: 10px; }
-  .load-btn:hover { background: #6d28d9; }
 </style>
 </head>
 <body>
@@ -59,11 +57,6 @@
 </div>
 
 <div class="card">
-  <div class="form-group">
-    <label>Airtable API Token</label>
-    <input type="password" id="apiToken" placeholder="Paste your personal access token here">
-  </div>
-  <button class="load-btn" onclick="loadData()">Load data</button>
   <div class="status" id="loadStatus"></div>
 </div>
 
@@ -125,21 +118,21 @@
 </div>
 
 <div class="card">
-  <button class="btn-submit" id="submitBtn" onclick="submitForm()">Submit</button>
+  <button class="btn-submit" id="submitBtn" onclick="submitForm()" disabled>Submit</button>
   <div class="status" id="statusMsg"></div>
 </div>
 
 <script>
 const BASE_ID = 'appKSv3xAO9AHTN6g';
 const TXN_TABLE_ID = 'tblrPpiv1u5B8Ag3c';
-const INV_TABLE_ID = 'tblvy0yjEIpAS81Hg'; // Trade Inventory
+const INV_TABLE_ID = 'tblvy0yjEIpAS81Hg';
 const AUDIT_TABLE = 'Audit%20Trail';
 const TRADE_INV_TABLE = 'Trade%20Inventory';
 const SYSTEM = 'Trade Stock Sys';
 
 let clients = [];
 let products = [];
-let tradeInventory = []; // [{clientId, productId, inStock}]
+let tradeInventory = [];
 
 // ─── Cookie helpers ──────────────────────────────────────────────────────────
 function setCookie(name, value) {
@@ -151,7 +144,7 @@ function getCookie(name) {
 }
 
 function getToken() {
-  return document.getElementById('apiToken').value.trim();
+  return getCookie('seven_pat') || '';
 }
 
 function showLoadStatus(type, msg) {
@@ -170,6 +163,10 @@ function showInventoryWarning(msg) {
   const el = document.getElementById('inventoryWarning');
   if (msg) { el.className = 'status warning'; el.textContent = msg; }
   else { el.className = 'status'; el.textContent = ''; }
+}
+
+function disableForm() {
+  document.getElementById('submitBtn').disabled = true;
 }
 
 async function apiCall(url, options = {}) {
@@ -195,12 +192,37 @@ async function writeAudit(status, notes, clientId) {
   });
 }
 
-async function loadData() {
-  const token = getToken();
-  if (!token) { showLoadStatus('error', 'Please paste your API token first.'); return; }
-  setCookie('seven_pat', token);
-  showLoadStatus('loading', 'Loading clients, products and inventory...');
+// ─── Fetch credentials then load data ────────────────────────────────────────
+async function fetchCredentialsAndLoad() {
+  showLoadStatus('loading', 'Checking network credentials…');
+  try {
+    const res = await fetch('https://seven.berlin/discogs/credentials.php');
+    if (res.status === 403) {
+      showLoadStatus('error', '🔒 This form can only be used from the SEVEN office network. Please connect to the office and try again.');
+      disableForm();
+      return;
+    }
+    if (!res.ok) {
+      showLoadStatus('error', 'Could not fetch credentials (HTTP ' + res.status + '). Please try again.');
+      disableForm();
+      return;
+    }
+    const creds = await res.json();
+    if (!creds.airtablePat) {
+      showLoadStatus('error', 'Credentials response did not contain an Airtable token. Please contact support.');
+      disableForm();
+      return;
+    }
+    setCookie('seven_pat', creds.airtablePat);
+    await loadData();
+  } catch (e) {
+    showLoadStatus('error', 'Failed to reach credentials endpoint: ' + e.message);
+    disableForm();
+  }
+}
 
+async function loadData() {
+  showLoadStatus('loading', 'Loading clients, products and inventory...');
   try {
     // Load clients
     const clientData = await apiCall(
@@ -250,10 +272,12 @@ async function loadData() {
     })).filter(r => r.clientId && r.productId);
 
     refreshProductDropdowns();
+    document.getElementById('submitBtn').disabled = false;
     showLoadStatus('success', '✓ Loaded ' + clients.length + ' clients, ' + products.length + ' products and ' + tradeInventory.length + ' inventory records.');
 
   } catch(e) {
     showLoadStatus('error', 'Error loading data: ' + e.message);
+    disableForm();
   }
 }
 
@@ -303,7 +327,6 @@ function buildProductOptions(selectEl, currentValue) {
       selectEl.appendChild(opt);
     });
   } else {
-    // All products
     products.forEach(p => {
       const opt = document.createElement('option');
       opt.value = p.id;
@@ -366,7 +389,7 @@ function handleTxnTypeChange() {
 
 async function submitForm() {
   const token = getToken();
-  if (!token) { showStatus('error', 'Please enter your API token.'); return; }
+  if (!token) { showStatus('error', 'No API token available. Please reload the page.'); return; }
 
   const clientId   = document.getElementById('clientSelect').value;
   const txnType    = document.getElementById('txnType').value;
@@ -389,7 +412,6 @@ async function submitForm() {
     const invoiceNum = row.querySelector('.invoice-input')?.value.trim() || '';
     if (!productId || !qty || qty < 1) { valid = false; return; }
 
-    // For Sold transactions, check quantity doesn't exceed stock
     if (txnType === 'Sold') {
       const inv = tradeInventory.find(r => r.clientId === clientId && r.productId === productId);
       const inStock = inv ? inv.inStock : 0;
@@ -402,11 +424,10 @@ async function submitForm() {
     }
 
     if (txnType === 'Direct Trade') {
-      // Create both a Shipped and a Sold record
       records.push({ fields: { 'Client': [clientId], 'Product': [productId], 'Txn type': 'Shipped', 'Quantity': qty } });
       records.push({ fields: { 'Client': [clientId], 'Product': [productId], 'Txn type': 'Sold',    'Quantity': qty } });
     } else {
-        const fields = {
+      const fields = {
         'Client':   [clientId],
         'Product':  [productId],
         'Txn type': txnType === 'Ship' ? 'Shipped' : txnType,
@@ -467,10 +488,7 @@ async function submitForm() {
 }
 
 addRow();
-
-// Pre-fill token from cookie
-const saved = getCookie('seven_pat');
-if (saved) document.getElementById('apiToken').value = saved;
+fetchCredentialsAndLoad();
 </script>
 </body>
 </html>
