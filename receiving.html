@@ -63,26 +63,14 @@
     <h1>Add Third Party Stock</h1>
     <p>Receive 3rd party vinyl via Discogs ID → Airtable Products + Stock transactions</p>
   </div>
-  <div class="version">v1.16</div>
+  <div class="version">v1.17</div>
 </header>
 
 <div class="container">
-  <div class="card">
+  <div class="card" id="credCard">
     <h2>Credentials</h2>
-    <div class="creds-grid">
-      <div>
-        <label>Airtable PAT</label>
-        <input type="password" id="airtablePat" placeholder="pat..." autocomplete="off">
-        <div class="cred-status" id="patStatus"></div>
-      </div>
-      <div>
-        <label>Discogs Token</label>
-        <input type="password" id="discogsToken" placeholder="Your Discogs personal access token" autocomplete="off">
-        <div class="cred-status" id="discogsStatus"></div>
-      </div>
-    </div>
-    <div style="margin-top:10px;">
-      <button class="btn btn-secondary" id="saveCredsBtn">Save credentials for session</button>
+    <div id="credStatus" style="font-size:13px;color:var(--muted);">
+      <span class="spinner"></span> Fetching credentials from server…
     </div>
   </div>
 
@@ -338,8 +326,7 @@ async function submitForm() {
   var pat = getPat();
   var discogsToken = getDiscogsToken();
   var distributor = document.getElementById('distributor').value.trim();
-  if (!pat) { alert('Please enter your Airtable PAT.'); return; }
-  if (!discogsToken) { alert('Please enter your Discogs token.'); return; }
+  if (!pat || !discogsToken) { alert('Credentials not loaded. Please make sure you are on the SEVEN office network.'); return; }
   if (!distributor) { alert('Please enter a distributor name.'); return; }
 
   var batch = [];
@@ -456,7 +443,6 @@ async function submitForm() {
 }
 
 // Initialise
-document.getElementById('saveCredsBtn').addEventListener('click', saveCreds);
 document.getElementById('addLineBtn').addEventListener('click', addLine);
 document.getElementById('submitBtn').addEventListener('click', submitForm);
 document.getElementById('newBatchBtn').addEventListener('click', function() {
@@ -469,10 +455,7 @@ document.getElementById('newBatchBtn').addEventListener('click', function() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
-var savedPat = sessionStorage.getItem('at_pat');
-var savedTok = sessionStorage.getItem('discogs_token');
-if (savedPat) { document.getElementById('airtablePat').value = savedPat; document.getElementById('patStatus').textContent = '✓ Saved for this session'; document.getElementById('patStatus').className = 'cred-status saved'; }
-if (savedTok) { document.getElementById('discogsToken').value = savedTok; document.getElementById('discogsStatus').textContent = '✓ Saved for this session'; document.getElementById('discogsStatus').className = 'cred-status saved'; }
+fetchCredentials();
 addLine(); addLine(); addLine();
 </script>
 </body>
