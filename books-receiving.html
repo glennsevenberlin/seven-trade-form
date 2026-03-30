@@ -484,7 +484,7 @@ async function loadCredentials() {
     const r = await fetch(CREDS_URL);
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json();
-    AT_TOKEN = d.airtable_pat || d.AIRTABLE_PAT;
+    AT_TOKEN = d.airtablePat || d.airtable_pat || d.AIRTABLE_PAT;
     if (!AT_TOKEN) throw new Error('No token in response');
     setCredsStatus('ok', '✓ Credentials loaded');
     document.getElementById('btn-submit').disabled = false;
