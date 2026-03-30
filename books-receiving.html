@@ -452,6 +452,13 @@ const F = {
   ITEM_TYPE:     'fld4N8pWTNmf3kK5Z',
   DISTRIBUTOR:   'fldhbkRCNvF9K0XCt',
   SALES_CHANNELS:'fldrvonAf050LuVOS',
+  WEIGHT:        'fld86wZXQaf2QO34s',
+  DIM_LENGTH:    'fldrNdRKsaaD0bTbi',
+  DIM_WIDTH:     'fld8J9EElfyN6EGU7',
+  DIM_HEIGHT:    'fldoSXW5yQwB4xj60',
+  COMMODITY:     'fldOTtlnU0Ka98C0n',
+  COUNTRY_ORIG:  'fldo4dBv7UqmJpOrZ',
+  CUSTOMS_DESC:  'fldFeKPhhyz1KoWQR',
 };
 
 // Field IDs — Stock transactions
@@ -620,6 +627,10 @@ async function tryGoogleBooks(isbn) {
     // Published date — normalise to YYYY-MM-DD
     const pubDate = normaliseDate(info.publishedDate || '');
 
+    // Dimensions — Google Books returns strings like "24.0 cm", parse to number
+    const dims = info.dimensions || {};
+    const parseDim = s => { const n = parseFloat(s); return isNaN(n) ? null : n; };
+
     return {
       source:      'Google Books',
       title:       info.title || '',
@@ -633,6 +644,9 @@ async function tryGoogleBooks(isbn) {
       coverUrl:    coverUrl,
       infoLink:    info.infoLink || vol.selfLink || '',
       price:       price,
+      dimHeight:   parseDim(dims.height),
+      dimWidth:    parseDim(dims.width),
+      dimThick:    parseDim(dims.thickness),
     };
   } catch (e) {
     return null;
@@ -668,6 +682,9 @@ async function tryOpenLibrary(isbn) {
       coverUrl:    coverUrl,
       infoLink:    b.url || `https://openlibrary.org/isbn/${isbn}`,
       price:       null,
+      dimHeight:   null,
+      dimWidth:    null,
+      dimThick:    null,
     };
   } catch (e) {
     return null;
@@ -933,6 +950,17 @@ async function upsertProduct(isbn, qty, cost, supplier, book, log) {
   if (cost > 0) fields[F.COST_EX_VAT] = cost;
   if (supplier) fields[F.DISTRIBUTOR] = supplier;
   if (imageField) fields[F.PRODUCT_IMAGE] = imageField;
+
+  // Dimensions from Google Books (when available)
+  if (book.dimHeight != null) fields[F.DIM_HEIGHT] = book.dimHeight;
+  if (book.dimWidth  != null) fields[F.DIM_WIDTH]  = book.dimWidth;
+  if (book.dimThick  != null) fields[F.DIM_LENGTH]  = book.dimThick;
+
+  // Static customs / shipping fields — always set for books
+  fields[F.WEIGHT]       = 0.400;
+  fields[F.COMMODITY]    = '4901.99.00';
+  fields[F.CUSTOMS_DESC] = 'Printed Book';
+  fields[F.COUNTRY_ORIG] = 'DE';
 
   let resp, method, url;
 
