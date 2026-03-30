@@ -585,12 +585,15 @@ function checkZeroWarn(id) {
 
 // ── Book Lookup ───────────────────────────────────────────────────────────────
 async function lookupISBN(id, isbn) {
-  // Try Google Books first
+  // Step 1: Google Books
   let result = await tryGoogleBooks(isbn);
-  if (!result) {
-    // Fallback: Open Library
-    result = await tryOpenLibrary(isbn);
-  }
+
+  // Step 2: Open Library (jscmd=data)
+  if (!result) result = await tryOpenLibrary(isbn);
+
+  // Step 3: Open Library (jscmd=details) — different dataset, catches more descriptions
+  if (!result) result = await tryOpenLibraryDetails(isbn);
+
   if (result) {
     bookCache[id] = result;
     showPreview(id, 'found', result);
@@ -691,6 +694,55 @@ async function tryOpenLibrary(isbn) {
   }
 }
 
+async function tryOpenLibraryDetails(isbn) {
+  try {
+    const url = `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=details`;
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const d = await r.json();
+    const key = `ISBN:${isbn}`;
+    if (!d[key]) return null;
+    const det = d[key].details || {};
+
+    const authors   = (det.authors   || []).map(a => a.name || a.key || '').filter(Boolean).join(', ');
+    const publisher = (det.publishers|| []).join(', ');
+    const subjects  = (det.subjects  || []).map(s => typeof s === 'string' ? s : s.name || '').filter(Boolean).join(', ');
+    const coverUrl  = det.covers?.[0] ? `https://covers.openlibrary.org/b/id/${det.covers[0]}-L.jpg` : null;
+    const pubDate   = normaliseDate(det.publish_date || '');
+
+    // description can be a string or an object with a 'value' key
+    let description = '';
+    if (det.description) {
+      description = typeof det.description === 'string' ? det.description : (det.description.value || '');
+    }
+    if (!description && det.first_sentence) {
+      description = typeof det.first_sentence === 'string' ? det.first_sentence : (det.first_sentence.value || '');
+    }
+
+    if (!det.title && !authors && !description) return null;
+
+    return {
+      source:      'Open Library (details)',
+      title:       det.title || '',
+      authors:     authors,
+      publisher:   publisher,
+      description: description,
+      genre:       subjects,
+      format:      '',
+      pubDate:     pubDate,
+      isbn13:      isbn,
+      coverUrl:    coverUrl,
+      infoLink:    `https://openlibrary.org/isbn/${isbn}`,
+      price:       null,
+      dimHeight:   null,
+      dimWidth:    null,
+      dimThick:    null,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
 function extractISBN13(identifiers, fallback) {
   const i13 = identifiers.find(i => i.type === 'ISBN_13');
   if (i13) return i13.identifier;
@@ -755,7 +807,7 @@ function showPreview(id, state, book) {
       <div class="preview-title">${escHtml(book.title)}</div>
       <div class="preview-author">${escHtml(book.authors)}${escHtml(priceStr)}</div>
       <div class="preview-pub">${escHtml(pubStr)}</div>
-      <div class="preview-source">via ${book.source}</div>
+      <div class="preview-source">via ${book.source}${book.sourceExtra ? ' + ' + book.sourceExtra : ''}</div>
     </div>
   `;
 }
