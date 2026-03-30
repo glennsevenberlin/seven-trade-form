@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BookBot — Book Receiving · SEVEN</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg:        #0f0f0f;
+    --surface:   #181818;
+    --border:    #2a2a2a;
+    --border-hi: #3d3d3d;
+    --text:      #e8e8e8;
+    --muted:     #888;
+    --accent:    #c8a96e;
+    --accent-dim:#7a6240;
+    --green:     #4caf7d;
+    --red:       #e05c5c;
+    --amber:     #e0a050;
+    --blue:      #5b9bd5;
+    --radius:    6px;
+    --mono:      'DM Mono', monospace;
+    --sans:      'DM Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 32px 20px 80px;
+  }
+
+  /* ── Header ─────────────────────────────────────────── */
+  .header {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    margin-bottom: 32px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header-logo {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+  .header-title {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .header-version {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-left: auto;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── Cards ───────────────────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .card-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+
+  /* ── Credentials card ────────────────────────────────── */
+  .creds-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+  }
+  .creds-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .creds-dot.ok  { background: var(--green); }
+  .creds-dot.err { background: var(--red); }
+  .creds-dot.spin {
+    background: var(--accent);
+    animation: pulse 0.9s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+  /* ── Form fields ─────────────────────────────────────── */
+  label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    padding: 9px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input:focus { border-color: var(--accent-dim); }
+  input::placeholder { color: var(--muted); }
+
+  /* ── Lines ───────────────────────────────────────────── */
+  .lines-header {
+    display: grid;
+    grid-template-columns: 180px 1fr 90px 110px 32px;
+    gap: 8px;
+    padding: 0 0 8px 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 10px;
+  }
+  .lines-header span {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .line-row {
+    display: grid;
+    grid-template-columns: 180px 1fr 90px 110px 32px;
+    gap: 8px;
+    align-items: start;
+    margin-bottom: 12px;
+    position: relative;
+  }
+
+  /* Preview card per line */
+  .preview-card {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 14px;
+    background: #111;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-top: -4px;
+    margin-bottom: 4px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .preview-card.hidden { display: none; }
+  .preview-thumb {
+    width: 52px;
+    height: 72px;
+    object-fit: cover;
+    border-radius: 3px;
+    flex-shrink: 0;
+    background: var(--border);
+  }
+  .preview-thumb-placeholder {
+    width: 52px; height: 72px;
+    background: var(--border);
+    border-radius: 3px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 18px;
+  }
+  .preview-meta { flex: 1; min-width: 0; }
+  .preview-title {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .preview-author { color: var(--accent); font-size: 12px; }
+  .preview-pub    { color: var(--muted);  font-size: 11px; }
+  .preview-source {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    color: var(--accent-dim);
+    margin-top: 4px;
+  }
+  .preview-error {
+    color: var(--red);
+    font-size: 12px;
+    align-self: center;
+  }
+  .preview-looking {
+    color: var(--muted);
+    font-size: 12px;
+    align-self: center;
+    font-style: italic;
+  }
+
+  /* Zero qty warning */
+  .zero-warn {
+    grid-column: 1 / -1;
+    background: rgba(224,160,80,0.08);
+    border: 1px solid var(--amber);
+    border-radius: var(--radius);
+    padding: 9px 12px;
+    font-size: 12px;
+    color: var(--amber);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: -4px;
+  }
+  .zero-warn.hidden { display: none; }
+  .zero-warn input[type="checkbox"] { accent-color: var(--amber); width:14px; height:14px; cursor:pointer; }
+
+  .btn-remove {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--muted);
+    font-size: 16px;
+    cursor: pointer;
+    height: 36px;
+    width: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    align-self: start;
+    margin-top: 0;
+  }
+  .btn-remove:hover { border-color: var(--red); color: var(--red); }
+
+  .btn-add {
+    background: none;
+    border: 1px dashed var(--border-hi);
+    border-radius: var(--radius);
+    color: var(--muted);
+    font-size: 12px;
+    padding: 9px 16px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: var(--sans);
+    letter-spacing: 0.04em;
+    width: 100%;
+    margin-top: 4px;
+  }
+  .btn-add:hover { border-color: var(--accent-dim); color: var(--accent); }
+
+  /* ── Submit ──────────────────────────────────────────── */
+  .btn-submit {
+    background: var(--accent);
+    color: #0f0f0f;
+    border: none;
+    border-radius: var(--radius);
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 12px 32px;
+    cursor: pointer;
+    letter-spacing: 0.03em;
+    transition: opacity 0.15s;
+    display: block;
+    width: 100%;
+    margin-top: 8px;
+  }
+  .btn-submit:hover:not(:disabled) { opacity: 0.88; }
+  .btn-submit:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  /* ── Log ─────────────────────────────────────────────── */
+  #log-section { display: none; }
+  #log-section.visible { display: block; }
+  .log-box {
+    background: #0a0a0a;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.7;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  .log-line { padding: 1px 0; }
+  .log-line.ok     { color: var(--green); }
+  .log-line.info   { color: var(--blue); }
+  .log-line.warn   { color: var(--amber); }
+  .log-line.error  { color: var(--red); }
+  .log-line.muted  { color: var(--muted); }
+
+  .summary-pill {
+    display: inline-flex;
+    gap: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 8px 20px;
+    font-size: 12px;
+    margin: 12px 0 0;
+  }
+  .summary-pill span { color: var(--muted); }
+  .summary-pill b   { color: var(--text); }
+  .pill-ok  b { color: var(--green); }
+  .pill-err b { color: var(--red); }
+
+  .btn-new {
+    background: none;
+    border: 1px solid var(--accent-dim);
+    border-radius: var(--radius);
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 12px;
+    padding: 8px 18px;
+    cursor: pointer;
+    margin-top: 12px;
+    display: inline-block;
+    transition: all 0.15s;
+  }
+  .btn-new:hover { background: rgba(200,169,110,0.08); }
+
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 8px 0 16px;
+  }
+
+  @media (max-width: 600px) {
+    .lines-header { display: none; }
+    .line-row {
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto auto auto;
+    }
+    .line-row > *:nth-child(1) { grid-column: 1 / 3; }
+    .line-row > *:nth-child(4) { grid-column: 1 / 2; }
+    .line-row > *:nth-child(5) { grid-column: 2 / 3; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-logo">SEVEN Berlin</div>
+    <div class="header-title">BookBot — Book Receiving</div>
+  </div>
+  <div class="header-version">v1.0</div>
+</div>
+
+<!-- Credentials -->
+<div class="card" id="creds-card">
+  <div class="card-label">System Status</div>
+  <div class="creds-row">
+    <div class="creds-dot spin" id="creds-dot"></div>
+    <span id="creds-text">Loading credentials…</span>
+  </div>
+</div>
+
+<!-- Batch details -->
+<div class="card">
+  <div class="card-label">Batch Details</div>
+  <div style="max-width:320px">
+    <label for="supplier-input">Supplier / Source</label>
+    <input type="text" id="supplier-input" placeholder="e.g. Rough Trade, Amazon, direct" autocomplete="off">
+  </div>
+</div>
+
+<!-- Stock lines -->
+<div class="card">
+  <div class="card-label">Books to Receive</div>
+  <div class="lines-header">
+    <span>ISBN</span>
+    <span>Title preview</span>
+    <span>Qty</span>
+    <span>Cost (ex VAT)</span>
+    <span></span>
+  </div>
+  <div id="lines-container"></div>
+  <button class="btn-add" id="btn-add">+ Add line</button>
+</div>
+
+<!-- Submit -->
+<div class="card">
+  <button class="btn-submit" id="btn-submit" disabled>Submit Batch</button>
+</div>
+
+<!-- Log output -->
+<div id="log-section">
+  <div class="card">
+    <div class="card-label">Processing Log</div>
+    <div class="log-box" id="log-box"></div>
+    <div id="summary-area"></div>
+    <button class="btn-new" id="btn-new" style="display:none">+ Start new batch</button>
+  </div>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const CREDS_URL     = 'https://seven.berlin/discogs/credentials.php';
+const IMG_PROXY_URL = 'https://seven.berlin/books/books-image-proxy.php';
+
+const AT_BASE       = 'appKSv3xAO9AHTN6g';
+const AT_PRODUCTS   = 'tblvy0yjEIpAS81Hg';
+const AT_STOCK_TXN  = 'tblabQ3s2uVQ5qG9k';
+const AT_AUDIT      = 'tbl8fC3AoyShfqvm8';
+
+// Field IDs — Products
+const F = {
+  SKU:           'fldWsFXZRy7JqERc6',
+  NAME:          'fldhtSDxY0FyP6l4t',
+  STATUS:        'fldMH5qvUkfoDL0i7',
+  PRODUCT_TYPE:  'fldMM0VBpEDvHSNK9',
+  CAT_VIS:       'fldfritRZqRb4RacS',
+  BRAND:         'fldphdoDxwzNS6FMD',
+  SKUGRP:        'fldx7bx49vQZyMpH6',
+  SHORT_DESC:    'fldLXOemVI04Pv8J6',
+  REGULAR_PRICE: 'fldsWSfTRjLGIOret',
+  COST_EX_VAT:   'fldjBrxaUM0Vnmb1Y',
+  TAX_STATUS:    'fldvfQw3Nmhmj3nu0',
+  PRODUCT_IMAGE: 'fldAtPIG6UR25RD0A',
+  RELEASE_TITLE: 'fldidiIB2SrA5bc4d',
+  ARTIST_NAME:   'fld6F9w33m9pIH6ct',
+  RECORD_LABEL:  'fldcQurlBdlkUbLAR',
+  GTIN:          'fldWPnSLYqd0XFTvz',
+  GENRE:         'fldaqKYxGPY3xMaOc',
+  FORMAT:        'fld0BY1KnZLahLF8h',
+  MUSIC_REL_DATE:'fldJFeAIVfgwMh6CD',
+  DISCOGS_URL:   'fld2simfAJAFZXPrM',
+  ITEM_TYPE:     'fld4N8pWTNmf3kK5Z',
+  DISTRIBUTOR:   'fldhbkRCNvF9K0XCt',
+  SALES_CHANNELS:'fldrvonAf050LuVOS',
+};
+
+// Field IDs — Stock transactions
+const FS = {
+  PRODUCT:    'fldb6tvvEueEDjfEU',
+  QTY:        'fld9anO2LwTzdgunE',
+  USER:       'fldsbNS4ieMPeUr7E',
+  COMMENT:    'fldThvVRauzcGSvr1',
+};
+
+// Field IDs — Audit Trail
+const FA = {
+  TIMESTAMP: 'fldeKbw8hoLQK18xY',
+  SYSTEM:    'fld4wy3L9nTw5rfut',
+  STATUS:    'fldeEIC4XsSddLvQQ',
+  NOTES:     'fldZ98lVzvwuXwD4L',
+};
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let AT_TOKEN = null;
+let lineCount = 0;
+// Map lineId -> { bookData, source } for confirmed lookups
+const bookCache = {};
+// Map lineId -> lookup timer
+const lookupTimers = {};
+
+// ── Credentials ───────────────────────────────────────────────────────────────
+async function loadCredentials() {
+  try {
+    const r = await fetch(CREDS_URL);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    AT_TOKEN = d.airtable_pat || d.AIRTABLE_PAT;
+    if (!AT_TOKEN) throw new Error('No token in response');
+    setCredsStatus('ok', '✓ Credentials loaded');
+    document.getElementById('btn-submit').disabled = false;
+  } catch (e) {
+    setCredsStatus('err', '✗ Access restricted — must be on office network');
+    document.getElementById('btn-submit').disabled = true;
+  }
+}
+
+function setCredsStatus(state, msg) {
+  const dot  = document.getElementById('creds-dot');
+  const text = document.getElementById('creds-text');
+  dot.className = 'creds-dot ' + state;
+  text.textContent = msg;
+}
+
+// ── Lines ─────────────────────────────────────────────────────────────────────
+function addLine() {
+  lineCount++;
+  const id = lineCount;
+  const container = document.getElementById('lines-container');
+
+  const row = document.createElement('div');
+  row.className = 'line-row';
+  row.id = 'line-' + id;
+  row.innerHTML = `
+    <div>
+      <input type="text" id="isbn-${id}" placeholder="9781234567890"
+        autocomplete="off" inputmode="numeric"
+        style="font-family:var(--mono);letter-spacing:0.04em">
+    </div>
+    <div id="preview-wrap-${id}">
+      <div class="preview-card hidden" id="preview-${id}"></div>
+    </div>
+    <div>
+      <input type="number" id="qty-${id}" placeholder="0" min="0" step="1" value="">
+    </div>
+    <div>
+      <input type="number" id="cost-${id}" placeholder="0.00" min="0" step="0.01" value="">
+    </div>
+    <button class="btn-remove" onclick="removeLine(${id})" title="Remove">×</button>
+    <div class="zero-warn hidden" id="zero-warn-${id}">
+      <input type="checkbox" id="zero-confirm-${id}">
+      <label for="zero-confirm-${id}" style="text-transform:none;font-size:12px;color:var(--amber);letter-spacing:0;margin:0;cursor:pointer">
+        ⚠ Zero qty — will refresh data only, no stock added. Tick to confirm.
+      </label>
+    </div>
+  `;
+  container.appendChild(row);
+
+  // ISBN input triggers lookup after pause
+  document.getElementById('isbn-' + id).addEventListener('input', () => {
+    clearTimeout(lookupTimers[id]);
+    const isbn = cleanISBN(document.getElementById('isbn-' + id).value);
+    if (isbn.length >= 10) {
+      showPreview(id, 'looking', null);
+      lookupTimers[id] = setTimeout(() => lookupISBN(id, isbn), 600);
+    } else {
+      hidePreview(id);
+      delete bookCache[id];
+    }
+  });
+
+  // Qty change: show/hide zero warning
+  document.getElementById('qty-' + id).addEventListener('input', () => checkZeroWarn(id));
+}
+
+function removeLine(id) {
+  const el = document.getElementById('line-' + id);
+  if (el) el.remove();
+  delete bookCache[id];
+  delete lookupTimers[id];
+}
+
+function cleanISBN(v) {
+  return v.replace(/[\s\-]/g, '');
+}
+
+function checkZeroWarn(id) {
+  const qty = parseFloat(document.getElementById('qty-' + id)?.value || '');
+  const warn = document.getElementById('zero-warn-' + id);
+  if (!warn) return;
+  if (qty === 0) {
+    warn.classList.remove('hidden');
+  } else {
+    warn.classList.add('hidden');
+    const cb = document.getElementById('zero-confirm-' + id);
+    if (cb) cb.checked = false;
+  }
+}
+
+// ── Book Lookup ───────────────────────────────────────────────────────────────
+async function lookupISBN(id, isbn) {
+  // Try Google Books first
+  let result = await tryGoogleBooks(isbn);
+  if (!result) {
+    // Fallback: Open Library
+    result = await tryOpenLibrary(isbn);
+  }
+  if (result) {
+    bookCache[id] = result;
+    showPreview(id, 'found', result);
+  } else {
+    delete bookCache[id];
+    showPreview(id, 'error', null);
+  }
+}
+
+async function tryGoogleBooks(isbn) {
+  try {
+    const url = `https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&maxResults=1`;
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (!d.totalItems || !d.items?.length) return null;
+    const vol  = d.items[0];
+    const info = vol.volumeInfo || {};
+    const sale = vol.saleInfo   || {};
+
+    // Cover image — prefer the largest available
+    const imageLinks = info.imageLinks || {};
+    const coverUrl = imageLinks.extraLarge || imageLinks.large || imageLinks.medium
+                  || imageLinks.small      || imageLinks.thumbnail || null;
+
+    // Price — only use if EUR
+    let price = null;
+    if (sale.retailPrice?.currencyCode === 'EUR') {
+      price = sale.retailPrice.amount;
+    } else if (sale.listPrice?.currencyCode === 'EUR') {
+      price = sale.listPrice.amount;
+    }
+
+    // Published date — normalise to YYYY-MM-DD
+    const pubDate = normaliseDate(info.publishedDate || '');
+
+    return {
+      source:      'Google Books',
+      title:       info.title || '',
+      authors:     (info.authors || []).join(', '),
+      publisher:   info.publisher || '',
+      description: info.description || '',
+      genre:       (info.categories || []).join(', '),
+      format:      info.printType || '',
+      pubDate:     pubDate,
+      isbn13:      extractISBN13(info.industryIdentifiers || [], isbn),
+      coverUrl:    coverUrl,
+      infoLink:    info.infoLink || vol.selfLink || '',
+      price:       price,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function tryOpenLibrary(isbn) {
+  try {
+    const url = `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`;
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const d = await r.json();
+    const key = `ISBN:${isbn}`;
+    if (!d[key]) return null;
+    const b = d[key];
+
+    const authors   = (b.authors  || []).map(a => a.name).join(', ');
+    const publisher = (b.publishers || []).map(p => p.name).join(', ');
+    const subjects  = (b.subjects  || []).map(s => s.name || s).join(', ');
+    const coverUrl  = b.cover?.large || b.cover?.medium || b.cover?.small || null;
+    const pubDate   = normaliseDate(b.publish_date || '');
+
+    return {
+      source:      'Open Library',
+      title:       b.title || '',
+      authors:     authors,
+      publisher:   publisher,
+      description: b.notes || b.excerpts?.[0]?.text || '',
+      genre:       subjects,
+      format:      '',
+      pubDate:     pubDate,
+      isbn13:      isbn,
+      coverUrl:    coverUrl,
+      infoLink:    b.url || `https://openlibrary.org/isbn/${isbn}`,
+      price:       null,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+function extractISBN13(identifiers, fallback) {
+  const i13 = identifiers.find(i => i.type === 'ISBN_13');
+  if (i13) return i13.identifier;
+  const i10 = identifiers.find(i => i.type === 'ISBN_10');
+  if (i10) return i10.identifier;
+  return fallback;
+}
+
+function normaliseDate(d) {
+  if (!d) return '';
+  // Already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  // YYYY-MM
+  if (/^\d{4}-\d{2}$/.test(d)) return d + '-01';
+  // YYYY
+  if (/^\d{4}$/.test(d)) return d + '-01-01';
+  // "Month YYYY" e.g. "January 2020" or "Jan 2020"
+  const m = d.match(/(\w+)\s+(\d{4})/);
+  if (m) {
+    const months = {january:'01',february:'02',march:'03',april:'04',may:'05',june:'06',
+                    july:'07',august:'08',september:'09',october:'10',november:'11',december:'12',
+                    jan:'01',feb:'02',mar:'03',apr:'04',jun:'06',jul:'07',aug:'08',
+                    sep:'09',oct:'10',nov:'11',dec:'12'};
+    const mn = months[m[1].toLowerCase()];
+    if (mn) return m[2] + '-' + mn + '-01';
+  }
+  // "DD Month YYYY"
+  const m2 = d.match(/(\d{1,2})\s+(\w+)\s+(\d{4})/);
+  if (m2) {
+    const months = {january:'01',february:'02',march:'03',april:'04',may:'05',june:'06',
+                    july:'07',august:'08',september:'09',october:'10',november:'11',december:'12'};
+    const mn = months[m2[2].toLowerCase()];
+    if (mn) return m2[3] + '-' + mn + '-' + m2[1].padStart(2,'0');
+  }
+  return '';
+}
+
+// ── Preview UI ─────────────────────────────────────────────────────────────────
+function showPreview(id, state, book) {
+  const card = document.getElementById('preview-' + id);
+  card.classList.remove('hidden');
+
+  if (state === 'looking') {
+    card.innerHTML = `<span class="preview-looking">Looking up ISBN…</span>`;
+    return;
+  }
+  if (state === 'error') {
+    card.innerHTML = `<span class="preview-error">✗ Book not found in Google Books or Open Library. Check the ISBN and try again.</span>`;
+    return;
+  }
+  // found
+  const thumb = book.coverUrl
+    ? `<img class="preview-thumb" src="${escHtml(book.coverUrl)}" alt="cover" onerror="this.style.display='none'">`
+    : `<div class="preview-thumb-placeholder">📖</div>`;
+
+  const priceStr = book.price != null ? ` · €${book.price.toFixed(2)}` : '';
+  const pubStr   = [book.publisher, book.pubDate ? book.pubDate.slice(0,4) : ''].filter(Boolean).join(' · ');
+
+  card.innerHTML = `
+    ${thumb}
+    <div class="preview-meta">
+      <div class="preview-title">${escHtml(book.title)}</div>
+      <div class="preview-author">${escHtml(book.authors)}${escHtml(priceStr)}</div>
+      <div class="preview-pub">${escHtml(pubStr)}</div>
+      <div class="preview-source">via ${book.source}</div>
+    </div>
+  `;
+}
+
+function hidePreview(id) {
+  const card = document.getElementById('preview-' + id);
+  if (card) {
+    card.classList.add('hidden');
+    card.innerHTML = '';
+  }
+}
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Submit ────────────────────────────────────────────────────────────────────
+document.getElementById('btn-submit').addEventListener('click', async () => {
+  if (!AT_TOKEN) return;
+
+  const supplier = document.getElementById('supplier-input').value.trim();
+
+  // Gather lines
+  const rows = document.querySelectorAll('.line-row');
+  if (!rows.length) { alert('Add at least one line.'); return; }
+
+  const lines = [];
+  let valid = true;
+
+  for (const row of rows) {
+    const idMatch = row.id.match(/line-(\d+)/);
+    if (!idMatch) continue;
+    const id = parseInt(idMatch[1]);
+
+    const isbnRaw = document.getElementById('isbn-' + id)?.value || '';
+    const isbn    = cleanISBN(isbnRaw);
+    const qty     = parseFloat(document.getElementById('qty-' + id)?.value || '');
+    const cost    = parseFloat(document.getElementById('cost-' + id)?.value || '');
+
+    if (!isbn) continue; // skip blank lines
+
+    if (isNaN(qty) || qty < 0) {
+      alert('Line ' + id + ': enter a valid quantity (0 or more).'); valid = false; break;
+    }
+    if (qty === 0) {
+      const cb = document.getElementById('zero-confirm-' + id);
+      if (!cb?.checked) {
+        alert('Line ' + id + ': tick the zero-qty confirmation box before submitting.'); valid = false; break;
+      }
+    }
+    if (!bookCache[id]) {
+      alert('Line ' + id + ': book data not yet loaded. Wait for the preview to appear.'); valid = false; break;
+    }
+
+    lines.push({ id, isbn, qty, cost: isNaN(cost) ? 0 : cost, book: bookCache[id] });
+  }
+
+  if (!valid || !lines.length) return;
+
+  // Lock UI
+  document.getElementById('btn-submit').disabled = true;
+  document.getElementById('btn-add').disabled = true;
+  const logSection = document.getElementById('log-section');
+  logSection.classList.add('visible');
+  const logBox = document.getElementById('log-box');
+  logBox.innerHTML = '';
+
+  const log = (msg, cls='muted') => {
+    const d = document.createElement('div');
+    d.className = 'log-line ' + cls;
+    d.textContent = msg;
+    logBox.appendChild(d);
+    logBox.scrollTop = logBox.scrollHeight;
+  };
+
+  // Audit: batch start
+  const ts = new Date().toISOString();
+  log(`[${ts}] BookBot — batch start: ${lines.length} line(s)${supplier ? ' | Supplier: ' + supplier : ''}`, 'muted');
+  await writeAudit('Success', `Batch started — ${lines.length} line(s)${supplier ? ' | Supplier: ' + supplier : ''}`);
+
+  let okCount = 0, errCount = 0, newCount = 0, updCount = 0;
+
+  for (const line of lines) {
+    const { id, isbn, qty, cost, book } = line;
+    log(`\n→ Processing: "${book.title}" (ISBN: ${isbn})`, 'info');
+
+    try {
+      // 1. Upsert product
+      const upsertResult = await upsertProduct(isbn, qty, cost, supplier, book, log);
+      if (!upsertResult.ok) throw new Error(upsertResult.error);
+      const { recId, isNew } = upsertResult;
+      if (isNew) newCount++; else updCount++;
+      log(`  ✓ Product ${isNew ? 'created' : 'updated'} — record ID: ${recId}`, 'ok');
+
+      // 2. Write stock transaction (unless qty === 0)
+      if (qty > 0) {
+        await writeStockTxn(recId, qty, book.title, supplier, log);
+      } else {
+        log(`  ℹ Zero qty — data refreshed, no stock transaction written`, 'info');
+      }
+
+      // 3. Audit success
+      await writeAudit('Success',
+        `${isNew ? 'Created' : 'Updated'}: "${book.title}" | Author: ${book.authors} | ISBN: ${isbn} | Publisher: ${book.publisher} | Source: ${book.source} | Qty: ${qty} | Cost: €${cost.toFixed(2)}${supplier ? ' | Supplier: ' + supplier : ''}${book.price != null ? ' | RRP: €' + book.price.toFixed(2) : ''}`
+      );
+
+      okCount++;
+    } catch (e) {
+      log(`  ✗ Error: ${e.message}`, 'error');
+      await writeAudit('Error',
+        `Failed: "${book.title}" | ISBN: ${isbn} | Qty: ${qty} | Cost: €${cost.toFixed(2)} | Error: ${e.message}`
+      );
+      errCount++;
+    }
+  }
+
+  // Batch summary
+  const summaryMsg = `Batch complete — ${lines.length} line(s): ${okCount} OK, ${errCount} error(s), ${newCount} new product(s), ${updCount} updated`;
+  log(`\n${summaryMsg}`, errCount ? 'warn' : 'ok');
+  await writeAudit(errCount ? 'Warning' : 'Success', summaryMsg);
+
+  // Summary pill
+  const summaryArea = document.getElementById('summary-area');
+  summaryArea.innerHTML = `
+    <div class="summary-pill">
+      <span class="pill-ok"><b>${okCount}</b> OK</span>
+      ${errCount ? `<span class="pill-err"><b>${errCount}</b> error(s)</span>` : ''}
+      <span><b>${newCount}</b> new</span>
+      <span><b>${updCount}</b> updated</span>
+    </div>
+  `;
+  document.getElementById('btn-new').style.display = 'inline-block';
+});
+
+// ── Upsert Product ────────────────────────────────────────────────────────────
+async function upsertProduct(isbn, qty, cost, supplier, book, log) {
+  const headers = {
+    'Authorization': 'Bearer ' + AT_TOKEN,
+    'Content-Type': 'application/json',
+  };
+
+  // Search by GTIN/EAC (ISBN)
+  const searchUrl = `https://api.airtable.com/v0/${AT_BASE}/${AT_PRODUCTS}?filterByFormula={GTIN/EAC}='${encodeURIComponent(isbn)}'&maxRecords=1`;
+  const sr = await fetch(searchUrl, { headers });
+  if (!sr.ok) throw new Error('Airtable search failed: ' + sr.status);
+  const sd = await sr.json();
+
+  const existing = sd.records?.[0];
+  const recId    = existing?.id || null;
+
+  // Build image attachment if we have a cover URL
+  let imageField = null;
+  if (book.coverUrl) {
+    try {
+      log(`  ↗ Fetching cover image via proxy…`, 'muted');
+      const proxyR = await fetch(`${IMG_PROXY_URL}?url=${encodeURIComponent(book.coverUrl)}`);
+      if (proxyR.ok) {
+        const proxyD = await proxyR.json();
+        if (proxyD.url) {
+          imageField = [{ url: proxyD.url, filename: isbn + '_cover.jpg' }];
+          log(`  ✓ Cover image ready`, 'muted');
+        }
+      }
+    } catch (e) {
+      log(`  ⚠ Cover image fetch failed: ${e.message}`, 'warn');
+    }
+  }
+
+  const fields = {
+    [F.SKU]:           isbn,
+    [F.GTIN]:          isbn,
+    [F.NAME]:          book.authors ? `${book.authors} — ${book.title}` : book.title,
+    [F.RELEASE_TITLE]: book.title,
+    [F.ARTIST_NAME]:   book.authors,
+    [F.RECORD_LABEL]:  book.publisher,
+    [F.BRAND]:         book.publisher,
+    [F.SHORT_DESC]:    book.description,
+    [F.GENRE]:         book.genre,
+    [F.FORMAT]:        book.format,
+    [F.DISCOGS_URL]:   book.infoLink,
+    [F.ITEM_TYPE]:     'Books',
+    [F.SKUGRP]:        'Books',
+    [F.STATUS]:        'draft',
+    [F.CAT_VIS]:       'hidden',
+    [F.TAX_STATUS]:    'taxable',
+    [F.PRODUCT_TYPE]:  'simple',
+    [F.SALES_CHANNELS]:['Online', 'In-Store'],
+  };
+
+  if (book.pubDate) fields[F.MUSIC_REL_DATE] = book.pubDate;
+  if (book.price != null) fields[F.REGULAR_PRICE] = book.price;
+  if (cost > 0) fields[F.COST_EX_VAT] = cost;
+  if (supplier) fields[F.DISTRIBUTOR] = supplier;
+  if (imageField) fields[F.PRODUCT_IMAGE] = imageField;
+
+  let resp, method, url;
+
+  if (recId) {
+    // PATCH existing
+    method = 'PATCH';
+    url = `https://api.airtable.com/v0/${AT_BASE}/${AT_PRODUCTS}/${recId}`;
+    resp = await fetch(url, { method, headers, body: JSON.stringify({ fields }) });
+  } else {
+    // POST new
+    method = 'POST';
+    url = `https://api.airtable.com/v0/${AT_BASE}/${AT_PRODUCTS}`;
+    resp = await fetch(url, { method, headers, body: JSON.stringify({ fields }) });
+  }
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    return { ok: false, error: err.error?.message || `Airtable ${method} failed (${resp.status})` };
+  }
+
+  const rd = await resp.json();
+  return { ok: true, recId: rd.id, isNew: !recId };
+}
+
+// ── Stock Transaction ─────────────────────────────────────────────────────────
+async function writeStockTxn(productRecId, qty, title, supplier, log) {
+  const comment = `Stock received — ${title}${supplier ? ' from ' + supplier : ''}`;
+  const body = {
+    fields: {
+      [FS.PRODUCT]: [productRecId],
+      [FS.QTY]:     qty,
+      [FS.USER]:    'BookBot',
+      [FS.COMMENT]: comment,
+    }
+  };
+  const r = await fetch(`https://api.airtable.com/v0/${AT_BASE}/${AT_STOCK_TXN}`, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + AT_TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    log(`  ⚠ Stock transaction failed: ${e.error?.message || r.status}`, 'warn');
+  } else {
+    log(`  ✓ Stock transaction written (qty: +${qty})`, 'ok');
+  }
+}
+
+// ── Audit Trail ───────────────────────────────────────────────────────────────
+async function writeAudit(status, notes) {
+  try {
+    await fetch(`https://api.airtable.com/v0/${AT_BASE}/${AT_AUDIT}`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + AT_TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: {
+        [FA.TIMESTAMP]: new Date().toISOString(),
+        [FA.SYSTEM]:    'BookBot',
+        [FA.STATUS]:    status,
+        [FA.NOTES]:     notes,
+      }}),
+    });
+  } catch (_) {}
+}
+
+// ── New batch ─────────────────────────────────────────────────────────────────
+document.getElementById('btn-new').addEventListener('click', () => {
+  document.getElementById('lines-container').innerHTML = '';
+  document.getElementById('supplier-input').value = '';
+  document.getElementById('log-box').innerHTML = '';
+  document.getElementById('summary-area').innerHTML = '';
+  document.getElementById('btn-new').style.display = 'none';
+  document.getElementById('log-section').classList.remove('visible');
+  document.getElementById('btn-submit').disabled = false;
+  document.getElementById('btn-add').disabled = false;
+  lineCount = 0;
+  Object.keys(bookCache).forEach(k => delete bookCache[k]);
+  addLine(); addLine(); addLine();
+});
+
+document.getElementById('btn-add').addEventListener('click', addLine);
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadCredentials();
+addLine(); addLine(); addLine();
+</script>
+</body>
+</html>
