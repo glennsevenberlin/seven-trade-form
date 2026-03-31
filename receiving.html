@@ -60,7 +60,7 @@
     <h1>Add Third Party Stock</h1>
     <p>Receive 3rd party vinyl via Discogs ID → Airtable Products + Stock transactions</p>
   </div>
-  <div class="version">v1.21</div>
+  <div class="version">v1.22</div>
 </header>
 
 <div class="container">
@@ -108,13 +108,15 @@ var BASE_ID      = 'appKSv3xAO9AHTN6g';
 var PRODUCTS_TBL = 'tblvy0yjEIpAS81Hg';
 var AUDIT_TBL    = 'tbl8fC3AoyShfqvm8';
 
-var _pat          = '';
-var _discogsToken = '';
-var lines         = [];
-var lineId        = 0;
+var _pat           = '';
+var _discogsToken  = '';
+var _youtubeApiKey = '';
+var lines          = [];
+var lineId         = 0;
 
-function getPat()          { return _pat; }
-function getDiscogsToken() { return _discogsToken; }
+function getPat()           { return _pat; }
+function getDiscogsToken()  { return _discogsToken; }
+function getYouTubeApiKey() { return _youtubeApiKey; }
 
 // ── Credentials ───────────────────────────────────────────────
 async function fetchCredentials() {
@@ -127,9 +129,10 @@ async function fetchCredentials() {
       return;
     }
     if (!res.ok) throw new Error('Server error ' + res.status);
-    var data      = await res.json();
-    _pat          = data.airtablePat;
-    _discogsToken = data.discogsToken;
+    var data       = await res.json();
+    _pat           = data.airtablePat;
+    _discogsToken  = data.discogsToken;
+    _youtubeApiKey = data.youtubeApiKey;
     document.getElementById('credStatus').innerHTML =
       '<span style="color:var(--success)">✓ Credentials loaded</span>';
   } catch(e) {
@@ -212,6 +215,29 @@ async function fetchDiscogs(releaseId, token) {
 
 function stripDisambig(n) { return n.replace(/\s*\(\d+\)$/, '').trim(); }
 
+// ── YouTube API ───────────────────────────────────────────────
+// Searches YouTube for artist + title and returns the top result URL.
+// Non-critical — if the search fails or returns nothing, import continues
+// normally and the YouTube Link field is left blank.
+async function fetchYouTubeUrl(artist, title, apiKey) {
+  if (!apiKey) return null;
+  try {
+    var query = encodeURIComponent(artist + ' ' + title);
+    var res   = await fetch(
+      'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&q='
+      + query + '&key=' + apiKey
+    );
+    if (!res.ok) return null;
+    var data = await res.json();
+    if (!data.items || !data.items.length) return null;
+    return 'https://www.youtube.com/watch?v=' + data.items[0].id.videoId;
+  } catch(e) {
+    console.warn('YouTube search failed:', e);
+    return null;
+  }
+}
+
+// ── Discogs parse ─────────────────────────────────────────────
 function parseDiscogs(d, costPrice, distributor) {
   var artist    = d.artists && d.artists.length ? stripDisambig(d.artists[0].name) : 'Unknown Artist';
   var title     = d.title || '';
@@ -226,11 +252,11 @@ function parseDiscogs(d, costPrice, distributor) {
   var fmtDescs  = fmt && fmt.descriptions ? fmt.descriptions.join(', ') : '';
   var productDesc = [
     fmtName && fmtDescs ? fmtName + ', ' + fmtDescs : (fmtName || fmtDescs),
-    // Use Discogs styles (not genres) in the product description to match the Genre field
+    // Use Discogs styles (not genres) in product description to match the Genre field
     d.styles && d.styles.length ? 'Genre: ' + d.styles.join(', ') : '',
     d.year ? 'Year: ' + d.year : ''
   ].filter(Boolean).join('\n');
-  var image        = d.images && d.images.length ? d.images[0].uri : null;
+  var image = d.images && d.images.length ? d.images[0].uri : null;
 
   // ── Date sanitisation ────────────────────────────────────────
   // Discogs sometimes returns dates with -00 month or day (e.g. 2024-09-00 or 2024-00-15).
@@ -315,9 +341,10 @@ async function searchProduct(discogsId, pat) {
   return data.records && data.records.length ? data.records[0] : null;
 }
 
-async function upsertProduct(existing, fields, imageAttachment, pat) {
-  var body   = { fields: Object.assign({}, fields) };
+async function upsertProduct(existing, fields, imageAttachment, youtubeUrl, pat) {
+  var body = { fields: Object.assign({}, fields) };
   if (imageAttachment) body.fields['Product image'] = imageAttachment;
+  if (youtubeUrl)      body.fields['YouTube Link']  = youtubeUrl;
   var url    = existing
     ? 'https://api.airtable.com/v0/' + BASE_ID + '/' + PRODUCTS_TBL + '/' + existing.id
     : 'https://api.airtable.com/v0/' + BASE_ID + '/' + PRODUCTS_TBL;
@@ -351,6 +378,7 @@ function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
 async function submitForm() {
   var pat          = getPat();
   var discogsToken = getDiscogsToken();
+  var youtubeKey   = getYouTubeApiKey();
   var distributor  = document.getElementById('distributor').value.trim();
 
   if (!pat || !discogsToken) { alert('Credentials not loaded. Please make sure you are on the SEVEN office network.'); return; }
@@ -412,9 +440,18 @@ async function submitForm() {
       log('  ✓ Discogs: ' + parsed.artist + ' — ' + parsed.title, 'success');
 
       var imageAttachment = await fetchImageAsAttachment(parsed.imageUrl);
+
+      // ── YouTube search ─────────────────────────────────────
+      var youtubeUrl = await fetchYouTubeUrl(parsed.artist, parsed.title, youtubeKey);
+      if (youtubeUrl) {
+        log('  ✓ YouTube: ' + youtubeUrl, 'success');
+      } else {
+        log('  ℹ YouTube: no result found', 'info');
+      }
+
       var existing        = await searchProduct(parsed.discogsId, pat);
       var action          = existing ? 'updated' : 'created';
-      var productRecordId = await upsertProduct(existing, parsed.fields, imageAttachment, pat);
+      var productRecordId = await upsertProduct(existing, parsed.fields, imageAttachment, youtubeUrl, pat);
       log('  ✓ Product ' + action + ' — record ' + productRecordId, 'success');
       if (action === 'created') created++; else updated++;
 
@@ -438,13 +475,14 @@ async function submitForm() {
         'Format: ' + parsed.fields['Format'] + ' ' + parsed.fields['Format Details'],
         'Qty: +' + item.qty + ' | Cost: €' + item.cost + ' | Distributor: ' + distributor,
         'Image: ' + (imageAttachment ? 'uploaded' : 'none'),
+        'YouTube: ' + (youtubeUrl || 'not found'),
         'Discogs URL: ' + parsed.fields['Discogs URL']
       ].join('\n'), pat);
 
       ok++;
     } catch(err) {
       log('  ✗ Error: ' + err.message, 'error');
-      // ── qty and cost added to error audit so the line can be recovered from audit trail alone
+      // qty and cost included in error audit so the line can be recovered from audit trail alone
       await audit('Error', 'Failed — Discogs ID: ' + item.did + '\nError: ' + err.message + '\nQty: ' + item.qty + ' | Cost: €' + item.cost + '\nDistributor: ' + distributor, pat);
       errs++;
     }
