@@ -60,7 +60,7 @@
     <h1>Add Third Party Stock</h1>
     <p>Receive 3rd party vinyl via Discogs ID → Airtable Products + Stock transactions</p>
   </div>
-  <div class="version">v1.20</div>
+  <div class="version">v1.21</div>
 </header>
 
 <div class="container">
@@ -226,6 +226,7 @@ function parseDiscogs(d, costPrice, distributor) {
   var fmtDescs  = fmt && fmt.descriptions ? fmt.descriptions.join(', ') : '';
   var productDesc = [
     fmtName && fmtDescs ? fmtName + ', ' + fmtDescs : (fmtName || fmtDescs),
+    // Use Discogs styles (not genres) in the product description to match the Genre field
     d.styles && d.styles.length ? 'Genre: ' + d.styles.join(', ') : '',
     d.year ? 'Year: ' + d.year : ''
   ].filter(Boolean).join('\n');
@@ -265,7 +266,8 @@ function parseDiscogs(d, costPrice, distributor) {
     'Label Cat ID':              label ? label.catno : '',
     'Release Title':             title,
     'Year of Release':           d.year ? String(d.year) : '',
-    'Genre':                     (d.genres || []).join(', '),
+    // Genre field populated from Discogs styles (more specific than genres)
+    'Genre':                     (d.styles || []).join(', '),
     'Style':                     (d.styles || []).join(', '),
     'Format':                    fmtName,
     'Format Details':            fmtDescs,
