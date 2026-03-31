@@ -226,7 +226,7 @@ function parseDiscogs(d, costPrice, distributor) {
   var fmtDescs  = fmt && fmt.descriptions ? fmt.descriptions.join(', ') : '';
   var productDesc = [
     fmtName && fmtDescs ? fmtName + ', ' + fmtDescs : (fmtName || fmtDescs),
-    d.genres && d.genres.length ? 'Genre: ' + d.genres.join(', ') : '',
+    d.styles && d.styles.length ? 'Genre: ' + d.styles.join(', ') : '',
     d.year ? 'Year: ' + d.year : ''
   ].filter(Boolean).join('\n');
   var image        = d.images && d.images.length ? d.images[0].uri : null;
