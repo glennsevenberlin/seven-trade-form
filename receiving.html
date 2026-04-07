@@ -23,11 +23,14 @@
   .card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 14px; }
   input[type=text], input[type=number] { width: 100%; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: 14px; font-family: var(--font); }
   input:focus { outline: 2px solid var(--accent2); border-color: transparent; }
+  input.input-error { border-color: var(--error); outline: 2px solid #f8d7da; }
+  .field-error { font-size: 11px; color: var(--error); margin-top: 4px; display: none; }
+  .field-error.visible { display: block; }
   label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: var(--muted); }
   .lines-header { display: grid; grid-template-columns: 40px 1fr 110px 130px 36px; gap: 8px; padding: 0 0 6px 0; border-bottom: 2px solid var(--border); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
-  .line-row { display: grid; grid-template-columns: 40px 1fr 110px 130px 36px; gap: 8px; padding: 8px 0 4px 0; border-bottom: 1px solid #f0f0f0; align-items: center; }
-  .line-num { font-size: 12px; color: var(--muted); font-weight: 600; }
-  .btn-remove { background: none; border: 1px solid #ddd; border-radius: 4px; width: 30px; height: 30px; cursor: pointer; color: var(--muted); font-size: 16px; display: flex; align-items: center; justify-content: center; }
+  .line-row { display: grid; grid-template-columns: 40px 1fr 110px 130px 36px; gap: 8px; padding: 8px 0 4px 0; border-bottom: 1px solid #f0f0f0; align-items: start; }
+  .line-num { font-size: 12px; color: var(--muted); font-weight: 600; padding-top: 9px; }
+  .btn-remove { background: none; border: 1px solid #ddd; border-radius: 4px; width: 30px; height: 30px; cursor: pointer; color: var(--muted); font-size: 16px; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
   .btn-remove:hover { background: #fff0f0; border-color: var(--error); color: var(--error); }
   .zero-qty-warning { grid-column: 1 / -1; background: #fff8e1; border: 1px solid #ffe082; border-radius: 4px; padding: 7px 10px; font-size: 12px; color: #7c5e00; display: flex; align-items: center; gap: 8px; }
   .zero-qty-warning input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--warning); flex-shrink: 0; }
@@ -44,6 +47,7 @@
   .log-entry.info { color: #aac4ff; }
   .log-entry.success { color: #69db7c; }
   .log-entry.error { color: #ff6b6b; }
+  .log-entry.warning { color: #ffd166; }
   .log-entry.muted { color: #444; }
   .summary { margin-top: 12px; display: flex; gap: 12px; flex-wrap: wrap; }
   .summary-pill { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
@@ -60,7 +64,7 @@
     <h1>Add Third Party Stock</h1>
     <p>Receive 3rd party vinyl via Discogs ID → Airtable Products + Stock transactions</p>
   </div>
-  <div class="version">v1.22</div>
+  <div class="version">v1.23</div>
 </header>
 
 <div class="container">
@@ -156,12 +160,44 @@ function appendLine(id) {
   row.id        = 'row-' + id;
   row.innerHTML =
     '<div class="line-num" id="num-' + id + '"></div>' +
-    '<div><input type="text" id="did-' + id + '" placeholder="e.g. 12345678" style="font-family:monospace"></div>' +
+    '<div>' +
+      '<input type="text" id="did-' + id + '" placeholder="e.g. 12345678" style="font-family:monospace">' +
+      '<div class="field-error" id="did-err-' + id + '">This looks like a Master ID — please use a Release ID instead.</div>' +
+    '</div>' +
     '<div><input type="number" id="qty-' + id + '" placeholder="0" min="0" step="1"></div>' +
     '<div><input type="number" id="cost-' + id + '" placeholder="0.00" min="0" step="0.01"></div>' +
     '<div><button class="btn-remove" data-id="' + id + '">×</button></div>';
   row.querySelector('.btn-remove').addEventListener('click', function() { removeLine(id); });
+
+  // ── Master ID validation on blur ──────────────────────────
+  var didInput = row.querySelector('#did-' + id);
+  didInput.addEventListener('blur', function() { validateDiscogsField(id); });
+  didInput.addEventListener('input', function() {
+    // Clear error as soon as they start correcting
+    if (!isMasterId(this.value)) clearDiscogsError(id);
+  });
+
   c.appendChild(row);
+}
+
+function isMasterId(raw) {
+  return /^\[?m/i.test(raw.trim());
+}
+
+function validateDiscogsField(id) {
+  var val = document.getElementById('did-' + id).value.trim();
+  if (val && isMasterId(val)) {
+    document.getElementById('did-' + id).classList.add('input-error');
+    document.getElementById('did-err-' + id).classList.add('visible');
+    return false;
+  }
+  clearDiscogsError(id);
+  return true;
+}
+
+function clearDiscogsError(id) {
+  document.getElementById('did-' + id).classList.remove('input-error');
+  document.getElementById('did-err-' + id).classList.remove('visible');
 }
 
 function removeLine(id) {
@@ -204,21 +240,33 @@ async function audit(status, notes, pat) {
   } catch(e) { console.warn('Audit failed:', e); }
 }
 
-// ── Discogs API ───────────────────────────────────────────────
+// ── Discogs API — with retry ──────────────────────────────────
+// Retries up to 3 times on failure, waiting 3s, 6s, 9s before each retry.
 async function fetchDiscogs(releaseId, token) {
-  var res = await fetch('https://api.discogs.com/releases/' + releaseId, {
-    headers: { 'Authorization': 'Discogs token=' + token, 'User-Agent': 'SevenBerlin/1.0' }
-  });
-  if (!res.ok) throw new Error('Discogs API returned ' + res.status + ' for ID ' + releaseId);
-  return res.json();
+  var delays = [3000, 6000, 9000];
+  var lastError;
+  for (var attempt = 0; attempt <= delays.length; attempt++) {
+    try {
+      var res = await fetch('https://api.discogs.com/releases/' + releaseId, {
+        headers: { 'Authorization': 'Discogs token=' + token, 'User-Agent': 'SevenBerlin/1.0' }
+      });
+      if (!res.ok) throw new Error('Discogs API returned ' + res.status + ' for ID ' + releaseId);
+      return await res.json();
+    } catch(e) {
+      lastError = e;
+      if (attempt < delays.length) {
+        var waitSec = delays[attempt] / 1000;
+        log('  ⚠ Discogs unavailable (attempt ' + (attempt + 1) + ') — retrying in ' + waitSec + 's…', 'warning');
+        await sleep(delays[attempt]);
+      }
+    }
+  }
+  throw lastError;
 }
 
 function stripDisambig(n) { return n.replace(/\s*\(\d+\)$/, '').trim(); }
 
 // ── YouTube API ───────────────────────────────────────────────
-// Searches YouTube for artist + title and returns the top result URL.
-// Non-critical — if the search fails or returns nothing, import continues
-// normally and the YouTube Link field is left blank.
 async function fetchYouTubeUrl(artist, title, apiKey) {
   if (!apiKey) return null;
   try {
@@ -252,15 +300,12 @@ function parseDiscogs(d, costPrice, distributor) {
   var fmtDescs  = fmt && fmt.descriptions ? fmt.descriptions.join(', ') : '';
   var productDesc = [
     fmtName && fmtDescs ? fmtName + ', ' + fmtDescs : (fmtName || fmtDescs),
-    // Use Discogs styles (not genres) in product description to match the Genre field
     d.styles && d.styles.length ? 'Genre: ' + d.styles.join(', ') : '',
     d.year ? 'Year: ' + d.year : ''
   ].filter(Boolean).join('\n');
   var image = d.images && d.images.length ? d.images[0].uri : null;
 
   // ── Date sanitisation ────────────────────────────────────────
-  // Discogs sometimes returns dates with -00 month or day (e.g. 2024-09-00 or 2024-00-15).
-  // Airtable rejects these. Replace any -00 segment with -01 and flag the change for auditing.
   var releasedDate          = null;
   var releasedDateSanitised = null;
   if (d.released) {
@@ -292,7 +337,6 @@ function parseDiscogs(d, costPrice, distributor) {
     'Label Cat ID':              label ? label.catno : '',
     'Release Title':             title,
     'Year of Release':           d.year ? String(d.year) : '',
-    // Genre field populated from Discogs styles (more specific than genres)
     'Genre':                     (d.styles || []).join(', '),
     'Style':                     (d.styles || []).join(', '),
     'Format':                    fmtName,
@@ -384,6 +428,16 @@ async function submitForm() {
   if (!pat || !discogsToken) { alert('Credentials not loaded. Please make sure you are on the SEVEN office network.'); return; }
   if (!distributor)          { alert('Please enter a distributor name.'); return; }
 
+  // ── Master ID validation — check all fields before proceeding ──
+  var hasMasterIdError = false;
+  for (var i = 0; i < lines.length; i++) {
+    if (!validateDiscogsField(lines[i])) hasMasterIdError = true;
+  }
+  if (hasMasterIdError) {
+    alert('One or more lines contain a Master ID. Please find the Release ID on Discogs and try again.');
+    return;
+  }
+
   var batch             = [];
   var needsConfirmation = false;
 
@@ -441,7 +495,6 @@ async function submitForm() {
 
       var imageAttachment = await fetchImageAsAttachment(parsed.imageUrl);
 
-      // ── YouTube search ─────────────────────────────────────
       var youtubeUrl = await fetchYouTubeUrl(parsed.artist, parsed.title, youtubeKey);
       if (youtubeUrl) {
         log('  ✓ YouTube: ' + youtubeUrl, 'success');
@@ -455,7 +508,6 @@ async function submitForm() {
       log('  ✓ Product ' + action + ' — record ' + productRecordId, 'success');
       if (action === 'created') created++; else updated++;
 
-      // ── Date sanitisation notice ───────────────────────────
       if (parsed.releasedDateSanitised) {
         log('  ℹ Date sanitised: ' + parsed.releasedDateSanitised, 'info');
         await audit('Info', 'Date sanitised — Discogs ID: ' + item.did + ' — ' + parsed.releasedDateSanitised + ' | Distributor: ' + distributor, pat);
@@ -482,7 +534,6 @@ async function submitForm() {
       ok++;
     } catch(err) {
       log('  ✗ Error: ' + err.message, 'error');
-      // qty and cost included in error audit so the line can be recovered from audit trail alone
       await audit('Error', 'Failed — Discogs ID: ' + item.did + '\nError: ' + err.message + '\nQty: ' + item.qty + ' | Cost: €' + item.cost + '\nDistributor: ' + distributor, pat);
       errs++;
     }
