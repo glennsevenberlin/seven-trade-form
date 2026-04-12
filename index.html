@@ -4,7 +4,590 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Trade Stock Movement</title>
+<style><!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trade Stock Movement</title>
 <style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; color: #333; background: #f5f5f5; padding: 20px; }
+  .card { background: #fff; border-radius: 10px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; color: #111; }
+  .subtitle { color: #888; font-size: 13px; margin-bottom: 0; }
+  .version { font-size: 11px; color: #ccc; text-align: right; margin-top: 8px; }
+  .nav-link { font-size: 13px; color: #7c3aed; text-decoration: none; font-weight: 600; }
+  .nav-link:hover { text-decoration: underline; }
+  label { display: block; font-weight: 500; margin-bottom: 6px; font-size: 13px; color: #555; }
+  select, input[type="text"], input[type="number"] {
+    width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px;
+    font-size: 14px; color: #333; background: #fff; appearance: none;
+  }
+  select:focus, input:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124,58,237,0.1); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-group { margin-bottom: 0; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { text-align: left; font-size: 12px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 10px; border-bottom: 1px solid #eee; }
+  tbody tr { border-bottom: 1px solid #f0f0f0; }
+  tbody td { padding: 8px 6px; vertical-align: middle; }
+  tbody td select, tbody td input { margin: 0; }
+  .btn-add { background: none; border: 1px dashed #bbb; border-radius: 6px; color: #888; padding: 8px 16px; cursor: pointer; font-size: 13px; width: 100%; margin-top: 12px; transition: all 0.15s; }
+  .btn-add:hover { border-color: #7c3aed; color: #7c3aed; background: #faf5ff; }
+  .btn-remove { background: none; border: none; color: #ccc; cursor: pointer; font-size: 18px; padding: 0 6px; line-height: 1; transition: color 0.15s; }
+  .btn-remove:hover { color: #e53e3e; }
+  .btn-submit { background: #7c3aed; color: #fff; border: none; border-radius: 8px; padding: 12px 32px; font-size: 15px; font-weight: 600; cursor: pointer; width: 100%; transition: background 0.15s; }
+  .btn-submit:hover:not(:disabled) { background: #6d28d9; }
+  .btn-submit:disabled { background: #bbb; cursor: not-allowed; }
+  .status { padding: 12px 16px; border-radius: 8px; font-size: 14px; margin-top: 12px; display: none; word-break: break-all; }
+  .status.success { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; display: block; }
+  .status.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; display: block; }
+  .status.loading { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; display: block; }
+  .status.warning { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; display: block; }
+  .invoice-col { display: none; }
+  .invoice-col.visible { display: table-cell; }
+  .qty-col { width: 90px; }
+  .remove-col { width: 40px; }
+  /* Promo badge on rows */
+  .promo-badge { display: inline-block; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 4px; font-size: 11px; font-weight: 700; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>Trade Stock Movement</h1>
+  <p class="subtitle">Enter stock movements for trade clients</p>
+  <p class="version">v1.68</p>
+  <div style="display:flex;gap:16px;margin-top:4px;">
+    <a class="nav-link" href="dispatch.html">ShipStation Dispatch →</a>
+    <a class="nav-link" href="invoicing.html">Trade Invoicing →</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="status" id="loadStatus"></div>
+</div>
+
+<div class="card">
+  <div class="row">
+    <div class="form-group">
+      <label>Staff name</label>
+      <select id="staffName">
+        <option value="">— Select staff —</option>
+        <option value="Philippe">Philippe</option>
+        <option value="Jonny">Jonny</option>
+        <option value="Glenn">Glenn</option>
+        <option value="CRYME">CRYME</option>
+        <option value="Rachel">Rachel</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Reason for movement</label>
+      <input type="text" id="reasonForMovement" placeholder="e.g. New consignment, quarterly update">
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="row">
+    <div class="form-group">
+      <label>Client</label>
+      <select id="clientSelect" onchange="onClientOrTypeChange()">
+        <option value="">— Select client —</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Transaction type</label>
+      <select id="txnType" onchange="onClientOrTypeChange()">
+        <option value="">— Select type —</option>
+        <option value="Shipped">Ship</option>
+        <option value="Sold">Sold</option>
+        <option value="Direct Trade">Direct Trade</option>
+      </select>
+    </div>
+  </div>
+  <div class="status" id="inventoryWarning" style="margin-top:12px;"></div>
+</div>
+
+<div class="card">
+  <table id="productTable">
+    <thead>
+      <tr>
+        <th>Product</th>
+        <th class="qty-col">Quantity</th>
+        <th class="invoice-col" id="invoiceHeader">Invoice number</th>
+        <th class="remove-col"></th>
+      </tr>
+    </thead>
+    <tbody id="productRows">
+    </tbody>
+  </table>
+  <button class="btn-add" onclick="addRow()">+ Add product</button>
+</div>
+
+<div class="card">
+  <button class="btn-submit" id="submitBtn" onclick="submitForm()" disabled>Submit</button>
+  <div class="status" id="statusMsg"></div>
+</div>
+
+<script>
+const BASE_ID = 'appKSv3xAO9AHTN6g';
+const TXN_TABLE_ID = 'tblrPpiv1u5B8Ag3c';
+const INV_TABLE_ID = 'tblvy0yjEIpAS81Hg';
+const AUDIT_TABLE = 'Audit%20Trail';
+const TRADE_INV_TABLE = 'Trade%20Inventory';
+const SYSTEM = 'Trade Stock Sys';
+
+// Field ID for the Promo checkbox in Trade Transactions
+const PROMO_FIELD_ID = 'fldHPUjNW1GtiDm5A';
+
+let clients = [];
+let directTradeProducts = []; // products with Sales Channel = Direct Trade
+let promoProducts = [];       // products with Sales Channel = Promo
+let tradeInventory = [];
+
+// ─── Cookie helpers ──────────────────────────────────────────────────────────
+function setCookie(name, value) {
+  document.cookie = name + '=' + encodeURIComponent(value) + '; path=/; SameSite=Strict';
+}
+function getCookie(name) {
+  const m = document.cookie.match('(?:^|; )' + name + '=([^;]*)');
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+function getToken() {
+  return getCookie('seven_pat') || '';
+}
+
+function showLoadStatus(type, msg) {
+  const el = document.getElementById('loadStatus');
+  el.className = 'status ' + type;
+  el.textContent = msg;
+}
+
+function showStatus(type, msg) {
+  const el = document.getElementById('statusMsg');
+  el.className = 'status ' + type;
+  el.textContent = msg;
+}
+
+function showInventoryWarning(msg) {
+  const el = document.getElementById('inventoryWarning');
+  if (msg) { el.className = 'status warning'; el.textContent = msg; }
+  else { el.className = 'status'; el.textContent = ''; }
+}
+
+function disableForm() {
+  document.getElementById('submitBtn').disabled = true;
+}
+
+async function apiCall(url, options = {}) {
+  const token = getToken();
+  const res = await fetch(url, {
+    method: options.method || 'GET',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: options.body || undefined
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error?.message || 'Airtable API error');
+  }
+  return res.json();
+}
+
+async function writeAudit(status, notes, clientId) {
+  const fields = { 'System': SYSTEM, 'Status': status, 'Notes': notes };
+  if (clientId) fields['Client'] = [clientId];
+  await apiCall('https://api.airtable.com/v0/' + BASE_ID + '/' + AUDIT_TABLE, {
+    method: 'POST',
+    body: JSON.stringify({ records: [{ fields }] })
+  });
+}
+
+// ─── Fetch credentials then load data ────────────────────────────────────────
+async function fetchCredentialsAndLoad() {
+  showLoadStatus('loading', 'Checking network credentials…');
+  try {
+    const res = await fetch('https://seven.berlin/discogs/credentials.php');
+    if (res.status === 403) {
+      showLoadStatus('error', '🔒 This form can only be used from the SEVEN office network. Please connect to the office and try again.');
+      disableForm();
+      return;
+    }
+    if (!res.ok) {
+      showLoadStatus('error', 'Could not fetch credentials (HTTP ' + res.status + '). Please try again.');
+      disableForm();
+      return;
+    }
+    const creds = await res.json();
+    if (!creds.airtablePat) {
+      showLoadStatus('error', 'Credentials response did not contain an Airtable token. Please contact support.');
+      disableForm();
+      return;
+    }
+    setCookie('seven_pat', creds.airtablePat);
+    await loadData();
+  } catch (e) {
+    showLoadStatus('error', 'Failed to reach credentials endpoint: ' + e.message);
+    disableForm();
+  }
+}
+
+async function loadData() {
+  showLoadStatus('loading', 'Loading clients, products and inventory...');
+  try {
+    // Load clients
+    const clientData = await apiCall(
+      'https://api.airtable.com/v0/' + BASE_ID + '/Trade%20Clients?fields[]=Trade%20Account&sort[0][field]=Trade%20Account'
+    );
+    clients = clientData.records;
+    const sel = document.getElementById('clientSelect');
+    sel.innerHTML = '<option value="">— Select client —</option>';
+    clients.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.fields['Trade Account'];
+      sel.appendChild(opt);
+    });
+
+    // Load products (all pages) — fetch both Direct Trade and Promo channels
+    let allProducts = [], offset = null;
+    do {
+      let url = 'https://api.airtable.com/v0/' + BASE_ID + '/Products?fields[]=SKU&fields[]=Name&fields[]=Sales%20Channels&sort[0][field]=SKU';
+      if (offset) url += '&offset=' + offset;
+      const data = await apiCall(url);
+      allProducts = allProducts.concat(data.records);
+      offset = data.offset;
+    } while (offset);
+
+    // Split into two lists — products can appear in both
+    directTradeProducts = allProducts.filter(p => {
+      const ch = p.fields['Sales Channels'];
+      if (!ch) return false;
+      return Array.isArray(ch) ? ch.includes('Direct Trade') : ch === 'Direct Trade';
+    });
+
+    promoProducts = allProducts.filter(p => {
+      const ch = p.fields['Sales Channels'];
+      if (!ch) return false;
+      return Array.isArray(ch) ? ch.includes('Promo') : ch === 'Promo';
+    });
+
+    // Load Trade Inventory (all pages)
+    let allInv = [], invOffset = null;
+    do {
+      let url = 'https://api.airtable.com/v0/' + BASE_ID + '/' + TRADE_INV_TABLE +
+                '?fields[]=Client&fields[]=Product&fields[]=In%20stock';
+      if (invOffset) url += '&offset=' + invOffset;
+      const data = await apiCall(url);
+      allInv = allInv.concat(data.records);
+      invOffset = data.offset;
+    } while (invOffset);
+
+    tradeInventory = allInv.map(r => ({
+      clientId:  r.fields['Client']?.[0],
+      productId: r.fields['Product']?.[0],
+      inStock:   r.fields['In stock'] || 0
+    })).filter(r => r.clientId && r.productId);
+
+    refreshProductDropdowns();
+    document.getElementById('submitBtn').disabled = false;
+    showLoadStatus('success',
+      '✓ Loaded ' + clients.length + ' clients · ' +
+      directTradeProducts.length + ' Direct Trade products · ' +
+      promoProducts.length + ' Promo products · ' +
+      tradeInventory.length + ' inventory records.');
+
+  } catch(e) {
+    showLoadStatus('error', 'Error loading data: ' + e.message);
+    disableForm();
+  }
+}
+
+// ─── Called when client or txn type changes ──────────────────────────────────
+function onClientOrTypeChange() {
+  handleTxnTypeChange();
+  refreshProductDropdowns();
+  showInventoryWarning('');
+
+  const txnType  = document.getElementById('txnType').value;
+  const clientId = document.getElementById('clientSelect').value;
+
+  if (txnType === 'Sold') {
+    if (!clientId) {
+      showInventoryWarning('Please select a client first to see available stock.');
+      return;
+    }
+    const hasStock = tradeInventory.some(r => r.clientId === clientId && r.inStock > 0);
+    if (!hasStock) {
+      showInventoryWarning('⚠️ No stock on record for this client. Make sure Ship transactions have been entered first.');
+    }
+  }
+}
+
+// ─── Build product options for a select element ──────────────────────────────
+// Uses <optgroup> to separate Direct Trade and Promo sections.
+// Each <option> carries data-promo="true/false" so we know how it was selected.
+function buildProductOptions(selectEl, currentValue) {
+  const txnType  = document.getElementById('txnType').value;
+  const clientId = document.getElementById('clientSelect').value;
+
+  selectEl.innerHTML = '<option value="">— Select product —</option>';
+
+  if (txnType === 'Sold' && clientId) {
+    // For Sold: Direct Trade only — promo items are gifted stock and never go into
+    // Trade Inventory, so there is nothing to mark as sold for them.
+    const stockMap = {};
+    tradeInventory.forEach(r => {
+      if (r.clientId === clientId && r.inStock > 0) {
+        stockMap[r.productId] = r.inStock;
+      }
+    });
+
+    const dtFiltered = directTradeProducts.filter(p => stockMap[p.id] !== undefined);
+
+    if (dtFiltered.length > 0) {
+      const grp = document.createElement('optgroup');
+      grp.label = 'Direct Trade';
+      dtFiltered.forEach(p => {
+        const stock = stockMap[p.id];
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.dataset.promo = 'false';
+        opt.textContent = p.fields.SKU + (p.fields.Name ? ' — ' + p.fields.Name : '') + ' (' + stock + ' in stock)';
+        grp.appendChild(opt);
+      });
+      selectEl.appendChild(grp);
+    }
+
+  } else {
+    // Ship / Direct Trade: show all products in both groups
+    if (directTradeProducts.length > 0) {
+      const grp = document.createElement('optgroup');
+      grp.label = 'Direct Trade';
+      directTradeProducts.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.dataset.promo = 'false';
+        opt.textContent = p.fields.SKU + (p.fields.Name ? ' — ' + p.fields.Name : '');
+        grp.appendChild(opt);
+      });
+      selectEl.appendChild(grp);
+    }
+
+    if (promoProducts.length > 0) {
+      const grp = document.createElement('optgroup');
+      grp.label = 'Promo';
+      promoProducts.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.dataset.promo = 'true';
+        opt.textContent = p.fields.SKU + (p.fields.Name ? ' — ' + p.fields.Name : '');
+        grp.appendChild(opt);
+      });
+      selectEl.appendChild(grp);
+    }
+  }
+
+  if (currentValue) selectEl.value = currentValue;
+}
+
+function refreshProductDropdowns() {
+  document.querySelectorAll('.product-select').forEach(sel => {
+    buildProductOptions(sel, sel.value);
+  });
+}
+
+// ─── Returns true if the selected option in a product <select> is from Promo group ─
+function isPromoSelection(selectEl) {
+  const selectedOpt = selectEl.options[selectEl.selectedIndex];
+  return selectedOpt ? selectedOpt.dataset.promo === 'true' : false;
+}
+
+// ─── Set max quantity when product selected in Sold mode ─────────────────────
+function onProductSelect(sel) {
+  const txnType  = document.getElementById('txnType').value;
+  const clientId = document.getElementById('clientSelect').value;
+  const qtyInput = sel.closest('tr').querySelector('.qty-input');
+
+  // Update promo badge on the row
+  const row = sel.closest('tr');
+  let badge = row.querySelector('.promo-badge');
+  if (isPromoSelection(sel)) {
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'promo-badge';
+      badge.textContent = 'PROMO';
+      sel.parentNode.appendChild(badge);
+    }
+  } else {
+    if (badge) badge.remove();
+  }
+
+  if (txnType === 'Sold' && clientId && sel.value) {
+    const inv = tradeInventory.find(r => r.clientId === clientId && r.productId === sel.value);
+    const inStock = inv ? inv.inStock : 0;
+    qtyInput.max = inStock;
+    qtyInput.title = inStock + ' in stock';
+  } else {
+    qtyInput.removeAttribute('max');
+    qtyInput.title = '';
+  }
+}
+
+function addRow() {
+  const tbody = document.getElementById('productRows');
+  const txnType = document.getElementById('txnType').value;
+  const showInvoice = txnType === 'Invoiced';
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><select class="product-select" onchange="onProductSelect(this)"></select></td>
+    <td class="qty-col"><input type="number" class="qty-input" min="1" placeholder="0"></td>
+    <td class="invoice-col${showInvoice ? ' visible' : ''}"><input type="text" class="invoice-input" placeholder="Invoice #"></td>
+    <td class="remove-col"><button class="btn-remove" onclick="removeRow(this)">×</button></td>
+  `;
+  tbody.appendChild(tr);
+  buildProductOptions(tr.querySelector('.product-select'), null);
+}
+
+function removeRow(btn) {
+  btn.closest('tr').remove();
+}
+
+function handleTxnTypeChange() {
+  const txnType = document.getElementById('txnType').value;
+  const showInvoice = txnType === 'Invoiced';
+  document.getElementById('invoiceHeader').classList.toggle('visible', showInvoice);
+  document.querySelectorAll('.invoice-col').forEach(el => el.classList.toggle('visible', showInvoice));
+}
+
+async function submitForm() {
+  const token = getToken();
+  if (!token) { showStatus('error', 'No API token available. Please reload the page.'); return; }
+
+  const clientId   = document.getElementById('clientSelect').value;
+  const txnType    = document.getElementById('txnType').value;
+  const staffName  = document.getElementById('staffName').value.trim() || 'Unknown';
+  const reason     = document.getElementById('reasonForMovement').value.trim() || 'No reason given';
+  const clientName = document.getElementById('clientSelect').options[document.getElementById('clientSelect').selectedIndex].text;
+
+  if (!clientId) { showStatus('error', 'Please select a client.'); return; }
+  if (!txnType)  { showStatus('error', 'Please select a transaction type.'); return; }
+
+  const rows = document.querySelectorAll('#productRows tr');
+  if (rows.length === 0) { showStatus('error', 'Please add at least one product.'); return; }
+
+  const records = [];
+  let valid = true;
+
+  rows.forEach(row => {
+    const productSel = row.querySelector('.product-select');
+    const productId  = productSel.value;
+    const qty        = parseInt(row.querySelector('.qty-input').value);
+    const invoiceNum = row.querySelector('.invoice-input')?.value.trim() || '';
+    const isPromo    = isPromoSelection(productSel);
+
+    if (!productId || !qty || qty < 1) { valid = false; return; }
+
+    if (txnType === 'Sold') {
+      const inv = tradeInventory.find(r => r.clientId === clientId && r.productId === productId);
+      const inStock = inv ? inv.inStock : 0;
+      if (qty > inStock) {
+        const productName = productSel.options[productSel.selectedIndex].text;
+        showStatus('error', `Quantity for ${productName.split(' (')[0]} exceeds stock held by this client (${inStock} in stock). Please correct before submitting.`);
+        valid = false;
+        return;
+      }
+    }
+
+    if (txnType === 'Direct Trade') {
+      // Both Shipped and Sold records get the Promo flag if selected from Promo group
+      records.push({ fields: {
+        'Client':           [clientId],
+        'Product':          [productId],
+        'Txn type':         'Shipped',
+        'Quantity':         qty,
+        [PROMO_FIELD_ID]:   isPromo
+      }});
+      records.push({ fields: {
+        'Client':           [clientId],
+        'Product':          [productId],
+        'Txn type':         'Sold',
+        'Quantity':         qty,
+        [PROMO_FIELD_ID]:   isPromo
+      }});
+    } else {
+      const fields = {
+        'Client':         [clientId],
+        'Product':        [productId],
+        'Txn type':       txnType === 'Ship' ? 'Shipped' : txnType,
+        'Quantity':       qty,
+        [PROMO_FIELD_ID]: isPromo
+      };
+      records.push({ fields });
+    }
+  });
+
+  if (!valid) { showStatus('error', 'Please make sure all rows have a product and a valid quantity.'); return; }
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  showStatus('loading', 'Submitting ' + records.length + ' record(s)...');
+
+  try {
+    for (let i = 0; i < records.length; i += 10) {
+      const batch = records.slice(i, i + 10);
+      await apiCall('https://api.airtable.com/v0/' + BASE_ID + '/' + TXN_TABLE_ID,
+        { method: 'POST', body: JSON.stringify({ records: batch }) });
+    }
+
+    const txnLabel   = txnType === 'Direct Trade' ? 'Direct Trade (Ship + Sold)' : txnType;
+    const promoRows  = [...document.querySelectorAll('#productRows tr')]
+      .filter(r => isPromoSelection(r.querySelector('.product-select'))).length;
+    const auditNote  = staffName + ' created ' + txnLabel + ' stock movement for ' + clientName +
+      ' (' + rows.length + ' product(s))' +
+      (promoRows > 0 ? ' including ' + promoRows + ' promo item(s)' : '') +
+      ' — ' + reason;
+    await writeAudit('Success', auditNote, clientId);
+
+    // Refresh inventory data so dropdowns stay accurate
+    let allInv = [], invOffset = null;
+    do {
+      let url = 'https://api.airtable.com/v0/' + BASE_ID + '/' + TRADE_INV_TABLE +
+                '?fields[]=Client&fields[]=Product&fields[]=In%20stock';
+      if (invOffset) url += '&offset=' + invOffset;
+      const data = await apiCall(url);
+      allInv = allInv.concat(data.records);
+      invOffset = data.offset;
+    } while (invOffset);
+    tradeInventory = allInv.map(r => ({
+      clientId:  r.fields['Client']?.[0],
+      productId: r.fields['Product']?.[0],
+      inStock:   r.fields['In stock'] || 0
+    })).filter(r => r.clientId && r.productId);
+
+    showStatus('success', '✓ ' + records.length + ' transaction(s) created successfully.');
+    document.getElementById('productRows').innerHTML = '';
+    document.getElementById('clientSelect').value = '';
+    document.getElementById('txnType').value = '';
+    document.getElementById('staffName').value = '';
+    document.getElementById('reasonForMovement').value = '';
+    showInventoryWarning('');
+    addRow();
+
+  } catch(e) {
+    await writeAudit('Error', 'Submit failed for ' + clientName + ' — ' + e.message, clientId).catch(() => {});
+    showStatus('error', 'Error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+addRow();
+fetchCredentialsAndLoad();
+</script>
+</body>
+</html>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; color: #333; background: #f5f5f5; padding: 20px; }
   .card { background: #fff; border-radius: 10px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
