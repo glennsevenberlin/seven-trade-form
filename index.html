@@ -85,7 +85,7 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
-  <p class="version">v1.70</p>
+  <p class="version">v1.72</p>
   <div style="display:flex;gap:16px;margin-top:4px;">
     <a class="nav-link" href="dispatch.html">ShipStation Dispatch →</a>
     <a class="nav-link" href="invoicing.html">Trade Invoicing →</a>
@@ -249,21 +249,27 @@ async function loadData() {
       sel.appendChild(opt);
     });
 
-    // Products (all pages)
+    // Products (all pages) — fetch Product type so we can filter to simple/variation only
     let allProds = [], offset = null;
     do {
-      let url = 'https://api.airtable.com/v0/' + BASE_ID + '/Products?fields[]=SKU&fields[]=Name&fields[]=Sales%20Channels&sort[0][field]=SKU';
+      let url = 'https://api.airtable.com/v0/' + BASE_ID + '/Products?fields[]=SKU&fields[]=Name&fields[]=Sales%20Channels&fields[]=Product%20type&sort[0][field]=SKU';
       if (offset) url += '&offset=' + offset;
       const data = await apiCall(url);
       allProds = allProds.concat(data.records);
       offset = data.offset;
     } while (offset);
 
-    directTradeProducts = allProds.filter(p => {
+    // Only show simple and variation products — excludes variable parents and other types
+    const shippableProds = allProds.filter(p => {
+      const t = (p.fields['Product type'] || '').toLowerCase();
+      return t === 'simple' || t === 'variation';
+    });
+
+    directTradeProducts = shippableProds.filter(p => {
       const ch = p.fields['Sales Channels'];
       return Array.isArray(ch) ? ch.includes('Direct Trade') : ch === 'Direct Trade';
     });
-    promoProducts = allProds.filter(p => {
+    promoProducts = shippableProds.filter(p => {
       const ch = p.fields['Sales Channels'];
       return Array.isArray(ch) ? ch.includes('Promo') : ch === 'Promo';
     });
@@ -437,6 +443,14 @@ function hideResults(tr) {
   tr.querySelector('.prod-results').classList.remove('open');
 }
 
+// Only hide results if focus has moved somewhere outside this row entirely.
+// If the user clicked a channel toggle button within the same row, keep results open.
+function onSearchBlur(e, tr) {
+  const related = e.relatedTarget;
+  if (related && tr.contains(related)) return; // focus stayed inside the row
+  setTimeout(() => hideResults(tr), 150);
+}
+
 function selectProduct(tr, productId, sku, name, isPromo) {
   tr.dataset.productId = productId;
   tr.dataset.isPromo   = isPromo ? 'true' : 'false';
@@ -521,9 +535,9 @@ function addRow() {
       <div class="prod-cell-inner">
         <div class="channel-toggle">
           <button type="button" class="channel-btn active-dt" data-channel="dt"
-            onclick="onChannelToggle(this, this.closest('tr'))">Direct Trade</button>
+            tabindex="0" onclick="onChannelToggle(this, this.closest('tr'))">Direct Trade</button>
           <button type="button" class="channel-btn" data-channel="promo" style="${promoDisplay}"
-            onclick="onChannelToggle(this, this.closest('tr'))">Promo</button>
+            tabindex="0" onclick="onChannelToggle(this, this.closest('tr'))">Promo</button>
         </div>
       </div>
       <div class="prod-search-wrap">
@@ -531,7 +545,7 @@ function addRow() {
           autocomplete="off"
           oninput="showResults(this.closest('tr'), searchProducts(this.closest('tr'), this.value))"
           onfocus="showResults(this.closest('tr'), searchProducts(this.closest('tr'), this.value))"
-          onblur="setTimeout(() => hideResults(this.closest('tr')), 150)"
+          onblur="onSearchBlur(event, this.closest('tr'))"
           onkeydown="handleSearchKey(event, this.closest('tr'))">
         <div class="prod-results"></div>
       </div>
