@@ -87,7 +87,7 @@
 <div class="top-bar">
   <h1>ShipStation Dispatch</h1>
   <p>Create ShipStation orders for trade client shipments</p>
-  <span class="version">v1.2</span>
+  <span class="version">v1.3</span>
   <a class="nav-link" href="index.html">← Stock Movement</a>
   <a class="nav-link" href="invoicing.html">Trade Invoicing →</a>
 </div>
@@ -394,8 +394,7 @@ function onClientChange() {
 
   if (clientDeliveryType === 'Personal Delivery') {
     deliveryMethod = 'Personal Delivery';
-    showMsg('delivery-section', 'info', ''); // ensure section hidden — note shown inline instead
-    document.getElementById('delivery-section').style.display = 'none';
+    document.getElementById('delivery-section').style.display = 'none'; // no toggle needed — auto-set
   } else if (clientDeliveryType === 'Ask each time') {
     deliveryMethod = 'Ship by Courier'; // default to courier, staff can change
     document.getElementById('delivery-section').style.display = 'block';
