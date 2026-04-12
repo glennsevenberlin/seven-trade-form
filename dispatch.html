@@ -72,6 +72,14 @@
 
   #loading-section { display: none; }
   #dispatch-section { display: none; }
+
+  /* Delivery method toggle */
+  .delivery-toggle { display: flex; gap: 0; border-radius: 6px; overflow: hidden; border: 1px solid #ddd; width: fit-content; }
+  .delivery-btn { padding: 8px 20px; font-size: 14px; font-weight: 600; border: none; background: #f9fafb; color: #6b7280; cursor: pointer; transition: all 0.15s; }
+  .delivery-btn:first-child { border-right: 1px solid #ddd; }
+  .delivery-btn.active-courier  { background: #7c3aed; color: #fff; }
+  .delivery-btn.active-personal { background: #0891b2; color: #fff; }
+  .delivery-btn:hover:not(.active-courier):not(.active-personal) { background: #f3f4f6; }
 </style>
 </head>
 <body>
@@ -79,7 +87,7 @@
 <div class="top-bar">
   <h1>ShipStation Dispatch</h1>
   <p>Create ShipStation orders for trade client shipments</p>
-  <span class="version">v1.1</span>
+  <span class="version">v1.2</span>
   <a class="nav-link" href="index.html">← Stock Movement</a>
   <a class="nav-link" href="invoicing.html">Trade Invoicing →</a>
 </div>
@@ -120,6 +128,20 @@
     </div>
   </div>
 
+  <!-- Delivery method (shown for "Ask each time" clients) -->
+  <div class="section" id="delivery-section" style="display:none;">
+    <label>Delivery method for this order</label>
+    <div style="margin-top:8px;">
+      <div class="delivery-toggle">
+        <button type="button" class="delivery-btn active-courier" id="del-btn-courier"
+          onclick="setDelivery('Ship by Courier')">🚚 Ship by Courier</button>
+        <button type="button" class="delivery-btn" id="del-btn-personal"
+          onclick="setDelivery('Personal Delivery')">🚶 Personal Delivery</button>
+      </div>
+    </div>
+    <div id="delivery-note" style="margin-top:10px;"></div>
+  </div>
+
   <!-- Transaction list -->
   <div class="section" id="txn-section" style="display:none;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
@@ -143,6 +165,9 @@
       <h3 id="summary-title"></h3>
       <div id="summary-lines"></div>
     </div>
+
+    <!-- Delivery method note inside txn section -->
+    <div id="delivery-inline-note"></div>
 
     <!-- Address warning -->
     <div id="addr-warning"></div>
@@ -182,7 +207,8 @@ let PAT = '';
 let allClients  = [];
 let allProducts = {};
 let allTxns     = [];
-let auditTableId = null;
+let auditTableId    = null;
+let deliveryMethod  = 'Ship by Courier'; // default; overridden by client setting or manual toggle
 
 // ─── Airtable helpers ────────────────────────────────────────────────────────
 async function atGet(tableId, params = {}) {
@@ -279,7 +305,8 @@ async function loadData() {
     const clientRecs = await atGetAll(T_CLIENTS, {
       'fields[]': ['Trade Account', 'Delivery Contact Name', 'Delivery Business / Store Name',
                    'Address 1', 'Address 2', 'City', 'State / Region',
-                   'Postcode', 'Country', 'Delivery Contact Phone', 'Delivery Contact Email']
+                   'Postcode', 'Country', 'Delivery Contact Phone', 'Delivery Contact Email',
+                   'Delivery Type']
     });
     allClients = clientRecs.sort((a,b) =>
       (a.fields['Trade Account']||'').localeCompare(b.fields['Trade Account']||''));
@@ -334,15 +361,50 @@ async function loadData() {
   }
 }
 
+// ─── Delivery method helpers ─────────────────────────────────────────────────
+function setDelivery(method) {
+  deliveryMethod = method;
+  document.getElementById('del-btn-courier').className  = 'delivery-btn' + (method === 'Ship by Courier'  ? ' active-courier'  : '');
+  document.getElementById('del-btn-personal').className = 'delivery-btn' + (method === 'Personal Delivery' ? ' active-personal' : '');
+  // Update inline note in txn section
+  const note = document.getElementById('delivery-inline-note');
+  if (method === 'Personal Delivery') {
+    note.innerHTML = '<div class="msg msg-info" style="margin-bottom:12px;">🚶 <strong>Personal Delivery</strong> — this order will be flagged in ShipStation. Phil should pack it but not print a courier label.</div>';
+  } else {
+    note.innerHTML = '';
+  }
+}
+
 // ─── Client change ───────────────────────────────────────────────────────────
 function onClientChange() {
   const clientId = document.getElementById('client-select').value;
   document.getElementById('result-msg').innerHTML = '';
   document.getElementById('addr-warning').innerHTML = '';
+  document.getElementById('delivery-section').style.display = 'none';
+  document.getElementById('delivery-inline-note').innerHTML = '';
 
   if (!clientId) {
     document.getElementById('txn-section').style.display = 'none';
     return;
+  }
+
+  // Set delivery method based on client's Delivery Type setting
+  const client = allClients.find(c => c.id === clientId);
+  const clientDeliveryType = client?.fields['Delivery Type'] || 'Ship by Courier';
+
+  if (clientDeliveryType === 'Personal Delivery') {
+    deliveryMethod = 'Personal Delivery';
+    showMsg('delivery-section', 'info', ''); // ensure section hidden — note shown inline instead
+    document.getElementById('delivery-section').style.display = 'none';
+  } else if (clientDeliveryType === 'Ask each time') {
+    deliveryMethod = 'Ship by Courier'; // default to courier, staff can change
+    document.getElementById('delivery-section').style.display = 'block';
+    setDelivery('Ship by Courier');
+    document.getElementById('delivery-note').innerHTML =
+      '<span style="font-size:13px;color:#6b7280;">Delivery method varies for this client — please select for this order.</span>';
+  } else {
+    deliveryMethod = 'Ship by Courier';
+    document.getElementById('delivery-section').style.display = 'none';
   }
 
   const clientTxns = allTxns.filter(t => {
@@ -388,7 +450,6 @@ function onClientChange() {
   });
 
   // Check address
-  const client = allClients.find(c => c.id === clientId);
   if (client) {
     const missing = [];
     if (!client.fields['Address 1']) missing.push('Address 1');
@@ -398,6 +459,11 @@ function onClientChange() {
       showMsg('addr-warning', 'warning',
         `⚠️ This client is missing: ${missing.join(', ')}. Please update the Trade Clients record before shipping.`);
     }
+  }
+
+  // Show personal delivery note inline if auto-set
+  if (clientDeliveryType === 'Personal Delivery') {
+    setDelivery('Personal Delivery');
   }
 
   document.getElementById('txn-section').style.display = 'block';
@@ -506,10 +572,12 @@ async function submitOrder() {
       'Email':             client.fields['Delivery Contact Email'] || '',
       'Internal Notes':    'Trade consignment shipment to ' + clientName +
                            (staff ? ' · Dispatched by ' + staff : '') +
+                           (deliveryMethod === 'Personal Delivery' ? ' · PERSONAL DELIVERY — do not print courier label' : '') +
                            (promoCount > 0 ? ' · Includes ' + promoCount + ' promo item(s) at £0.00' : ''),
       'Source Record ID':  checkedTxns.map(t => t.id).join(', '),
       'Source Record Ref': sourceRef,
       'DateTime Sent':     new Date().toISOString(),
+      'Delivery Type':     deliveryMethod,
     });
 
     const ssOrderId = orderRec.id;
