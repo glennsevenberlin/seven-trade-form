@@ -86,7 +86,7 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
-  <p class="version">v1.73</p>
+  <p class="version">v1.74</p>
   <div style="display:flex;gap:16px;margin-top:4px;">
     <a class="nav-link" href="dispatch.html">ShipStation Dispatch →</a>
     <a class="nav-link" href="invoicing.html">Trade Invoicing →</a>
@@ -178,12 +178,17 @@ function normalise(str) {
 
 // ─── Cookie helpers ──────────────────────────────────────────────────────────
 function setCookie(name, value) {
-  document.cookie = name + '=' + encodeURIComponent(value) + '; path=/; SameSite=Strict';
+  document.cookie = name + '=' + encodeURIComponent(value) + '; path=/; SameSite=Strict; Secure';
 }
 function getCookie(name) {
   const m = document.cookie.match('(?:^|; )' + name + '=([^;]*)');
   return m ? decodeURIComponent(m[1]) : null;
 }
+// ─── HTML escape helper — use for all Airtable data injected into innerHTML ──
+function esc(str) {
+  return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function getToken() { return getCookie('seven_pat') || ''; }
 
 // ─── Status helpers ──────────────────────────────────────────────────────────
@@ -246,7 +251,7 @@ async function loadData() {
     sel.innerHTML = '<option value="">— Select client —</option>';
     clients.forEach(c => {
       const opt = document.createElement('option');
-      opt.value = c.id; opt.textContent = c.fields['Trade Account'];
+      opt.value = c.id; opt.textContent = esc(c.fields['Trade Account'] || '');
       sel.appendChild(opt);
     });
 
@@ -429,7 +434,7 @@ function showResults(tr, results) {
     }
     const item = document.createElement('div');
     item.className = 'prod-result-item';
-    item.innerHTML = `${stockHtml}<span class="prod-result-sku">${sku}</span><span class="prod-result-name">${name}</span>`;
+    item.innerHTML = `${stockHtml}<span class="prod-result-sku">${esc(sku)}</span><span class="prod-result-name">${esc(name)}</span>`;
     item.addEventListener('mousedown', e => {
       e.preventDefault();
       selectProduct(tr, p.id, sku, name, tr.dataset.isPromo === 'true');
@@ -456,7 +461,7 @@ function selectProduct(tr, productId, sku, name, isPromo) {
   tr.dataset.productId = productId;
   tr.dataset.isPromo   = isPromo ? 'true' : 'false';
   const input = tr.querySelector('.prod-search-input');
-  input.value = sku + (name ? ' — ' + name : '');
+  input.value = esc(sku) + (name ? ' — ' + esc(name) : '');
   input.classList.remove('has-selection', 'promo-selection');
   input.classList.add(isPromo ? 'promo-selection' : 'has-selection');
 
@@ -591,7 +596,7 @@ async function submitForm() {
       const inStock = inv ? inv.inStock : 0;
       if (qty > inStock) {
         const displayName = row.querySelector('.prod-search-input').value;
-        showStatus('error', `Quantity for "${displayName}" exceeds stock held by this client (${inStock} in stock).`);
+        showStatus('error', `Quantity for "${esc(displayName)}" exceeds stock held by this client (${inStock} in stock).`);
         valid = false;
         return;
       }
