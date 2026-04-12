@@ -87,7 +87,7 @@
 <div class="top-bar">
   <h1>ShipStation Dispatch</h1>
   <p>Create ShipStation orders for trade client shipments</p>
-  <span class="version">v1.3</span>
+  <span class="version">v1.4</span>
   <a class="nav-link" href="index.html">← Stock Movement</a>
   <a class="nav-link" href="invoicing.html">Trade Invoicing →</a>
 </div>
@@ -369,7 +369,7 @@ function setDelivery(method) {
   // Update inline note in txn section
   const note = document.getElementById('delivery-inline-note');
   if (method === 'Personal Delivery') {
-    note.innerHTML = '<div class="msg msg-info" style="margin-bottom:12px;">🚶 <strong>Personal Delivery</strong> — this order will be flagged in ShipStation. Phil should pack it but not print a courier label.</div>';
+    note.innerHTML = '<div class="msg msg-info" style="margin-bottom:12px;">🚶 <strong>Personal Delivery</strong> — This account is set to Personal Delivery. Order will go to ShipStation for picking and packing but will be held for pickup / delivery and not shipped.</div>';
   } else {
     note.innerHTML = '';
   }
