@@ -85,7 +85,7 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
-  <p class="version">v1.69</p>
+  <p class="version">v1.70</p>
   <div style="display:flex;gap:16px;margin-top:4px;">
     <a class="nav-link" href="dispatch.html">ShipStation Dispatch →</a>
     <a class="nav-link" href="invoicing.html">Trade Invoicing →</a>
@@ -339,7 +339,18 @@ function setRowChannel(tr, channel) {
   tr.dataset.isPromo = (channel === 'promo') ? 'true' : 'false';
   tr.querySelector('.channel-btn[data-channel="dt"]').className    = 'channel-btn' + (channel === 'dt'    ? ' active-dt'    : '');
   tr.querySelector('.channel-btn[data-channel="promo"]').className = 'channel-btn' + (channel === 'promo' ? ' active-promo' : '');
-  clearRowSelection(tr);
+  // Clear selected product (it belonged to the previous channel) but keep
+  // the search text and immediately re-search within the new channel's list
+  tr.dataset.productId = '';
+  const input = tr.querySelector('.prod-search-input');
+  if (input) {
+    input.classList.remove('has-selection', 'promo-selection');
+    const badge = tr.querySelector('.promo-badge');
+    if (badge) badge.remove();
+    showResults(tr, searchProducts(tr, input.value));
+    input.focus();
+  }
+  updateQtyMax(tr);
 }
 
 function onChannelToggle(btn, tr) {
