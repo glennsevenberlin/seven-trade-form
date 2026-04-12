@@ -87,7 +87,7 @@
 <div class="top-bar">
   <h1>ShipStation Dispatch</h1>
   <p>Create ShipStation orders for trade client shipments</p>
-  <span class="version">v1.4</span>
+  <span class="version">v1.5</span>
   <a class="nav-link" href="index.html">← Stock Movement</a>
   <a class="nav-link" href="invoicing.html">Trade Invoicing →</a>
 </div>
@@ -188,12 +188,17 @@
 <script>
 // ─── Cookie helpers ──────────────────────────────────────────────────────────
 function setCookie(name, value) {
-  document.cookie = name + '=' + encodeURIComponent(value) + '; path=/; SameSite=Strict';
+  document.cookie = name + '=' + encodeURIComponent(value) + '; path=/; SameSite=Strict; Secure';
 }
 function getCookie(name) {
   const m = document.cookie.match('(?:^|; )' + name + '=([^;]*)');
   return m ? decodeURIComponent(m[1]) : null;
 }
+// ─── HTML escape helper — use for all Airtable data injected into innerHTML ──
+function esc(str) {
+  return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 const BASE        = 'appKSv3xAO9AHTN6g';
@@ -347,7 +352,7 @@ async function loadData() {
       opt.value = c.id;
       const acct  = c.fields['Trade Account'] || '';
       const store = c.fields['Delivery Business / Store Name'] || '';
-      opt.textContent = acct + (store && store !== acct ? ' — ' + store : '');
+      opt.textContent = esc(acct) + (store && store !== acct ? ' — ' + esc(store) : '');
       sel.appendChild(opt);
     });
 
@@ -439,10 +444,10 @@ function onClientChange() {
     row.innerHTML = `
       <input type="checkbox" onchange="onCheck()">
       <div>
-        <span class="txn-prod">${prodName}</span>
+        <span class="txn-prod">${esc(prodName)}</span>
         ${isPromo ? '<span class="promo-badge">PROMO</span>' : ''}
       </div>
-      <div class="txn-id">Txn #${txnId}</div>
+      <div class="txn-id">Txn #${esc(String(txnId))}</div>
       <div class="txn-qty">${qty}</div>
     `;
     list.appendChild(row);
@@ -515,7 +520,7 @@ function updateSummary() {
     const isPromo = txn?.fields['Promo'] === true;
     const p = document.createElement('p');
     p.className = 'summary-line';
-    p.textContent = `· ${name} × ${qty}${isPromo ? ' (PROMO — £0.00)' : ''}`;
+    p.textContent = `· ${esc(name)} × ${qty}${isPromo ? ' (PROMO — £0.00)' : ''}`;
     lines.appendChild(p);
   });
 
@@ -639,7 +644,7 @@ async function submitOrder() {
 function showMsg(id, type, text) {
   const el = document.getElementById(id);
   if (!el) return;
-  el.innerHTML = `<div class="msg msg-${type}">${text}</div>`;
+  el.innerHTML = `<div class="msg msg-${esc(type)}">${text}</div>`;
 }
 
 fetchCredentialsAndLoad();
