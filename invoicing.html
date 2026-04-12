@@ -78,7 +78,7 @@
   <div class="links">
     <a class="nav-link" href="index.html">← Stock Movement</a>
     <a class="nav-link" href="dispatch.html">ShipStation Dispatch</a>
-    <span class="version">v1.1</span>
+    <span class="version">v1.2</span>
   </div>
 </div>
 
@@ -102,8 +102,13 @@ let PAT = '';
 let products = {};
 let clients  = {};
 
-function setCookie(n, v) { document.cookie = n + '=' + encodeURIComponent(v) + '; path=/; SameSite=Strict'; }
+function setCookie(n, v) { document.cookie = n + '=' + encodeURIComponent(v) + '; path=/; SameSite=Strict; Secure'; }
 function getCookie(n) { const m = document.cookie.match('(?:^|; )' + n + '=([^;]*)'); return m ? decodeURIComponent(m[1]) : null; }
+// ─── HTML escape helper — use for all Airtable data injected into innerHTML ──
+function esc(str) {
+  return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 
 async function atGet(table, params = {}) {
   let url = `https://api.airtable.com/v0/${BASE}/${table}`;
@@ -262,9 +267,9 @@ function renderInvoicing(txns) {
 
       linesHtml += `
         <tr>
-          <td><span class="sku">${sku}</span></td>
-          <td><span class="prod">${name}</span></td>
-          <td style="color:#9ca3af;font-size:12px;">Txn #${txnId} · ${date}</td>
+          <td><span class="sku">${esc(sku)}</span></td>
+          <td><span class="prod">${esc(name)}</span></td>
+          <td style="color:#9ca3af;font-size:12px;">Txn #${esc(String(txnId))} · ${esc(date)}</td>
           <td class="qty">${qty}</td>
           <td class="price">${fmt(price)}</td>
           <td class="line-total">${fmt(lineTotal)}</td>
@@ -277,7 +282,7 @@ function renderInvoicing(txns) {
     block.dataset.txnIds = txnList.map(t => t.id).join(',');
     block.innerHTML = `
       <div class="client-header">
-        <span class="client-name">${clientName}</span>
+        <span class="client-name">${esc(clientName)}</span>
         <span class="client-count">${txnList.length} line(s)</span>
       </div>
       <table class="lines-table">
@@ -350,7 +355,7 @@ async function markInvoiced(clientId) {
       `Invoice ${invNum} (${invDate}) marked against ${txnIds.length} Sold transaction(s) for ${clientName}`,
       clientId);
 
-    showMsg('status-' + clientId, 'success', `✅ ${txnIds.length} transaction(s) marked as invoiced — ${invNum}`);
+    showMsg('status-' + clientId, 'success', `✅ ${txnIds.length} transaction(s) marked as invoiced — ${esc(invNum)}`);
     setTimeout(() => {
       const block = document.getElementById('block-' + clientId);
       if (block) block.style.transition = 'opacity 0.4s';
