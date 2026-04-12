@@ -30,20 +30,17 @@
   .btn-primary:hover { background: #6d28d9; }
   .btn-primary:disabled { background: #c4b5fd; cursor: not-allowed; }
 
-  /* Status messages */
   .status { padding: 12px 16px; border-radius: 8px; font-size: 14px; margin-top: 12px; display: none; }
   .status.success { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; display: block; }
   .status.error   { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; display: block; }
   .status.loading { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; display: block; }
   .status.info    { background: #f5f3ff; color: #5b21b6; border: 1px solid #ddd6fe; display: block; }
 
-  /* Client invoice block */
   .client-block { background: #fff; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden; }
   .client-header { background: #f5f3ff; padding: 14px 20px; border-bottom: 2px solid #ede9fe; display: flex; align-items: center; justify-content: space-between; }
   .client-name { font-size: 16px; font-weight: 700; color: #4c1d95; }
   .client-count { font-size: 13px; color: #7c3aed; }
 
-  /* Lines table */
   .lines-table { width: 100%; border-collapse: collapse; }
   .lines-table th { text-align: left; font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 16px; border-bottom: 1px solid #f3f4f6; }
   .lines-table td { padding: 10px 16px; border-bottom: 1px solid #f9fafb; font-size: 14px; vertical-align: middle; }
@@ -55,13 +52,11 @@
   .price { text-align: right; color: #374151; }
   .line-total { text-align: right; font-weight: 700; color: #111; }
 
-  /* Subtotal row */
   .subtotal-row { background: #f9fafb; border-top: 2px solid #e5e7eb; }
   .subtotal-row td { padding: 12px 16px; font-weight: 700; font-size: 15px; }
   .subtotal-label { color: #374151; }
   .subtotal-amount { text-align: right; color: #111; font-size: 16px; }
 
-  /* Invoice entry */
   .invoice-entry { padding: 16px 20px; border-top: 1px solid #e5e7eb; background: #fafafa; }
   .invoice-entry-grid { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; }
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px; }
@@ -75,7 +70,6 @@
 </head>
 <body>
 
-<!-- Top bar -->
 <div class="top-bar">
   <div>
     <h1>Trade Invoicing</h1>
@@ -84,16 +78,14 @@
   <div class="links">
     <a class="nav-link" href="index.html">← Stock Movement</a>
     <a class="nav-link" href="dispatch.html">ShipStation Dispatch</a>
-    <span class="version">v1.0</span>
+    <span class="version">v1.1</span>
   </div>
 </div>
 
-<!-- Credential status -->
 <div class="card" id="status-card">
   <div class="status" id="load-status"></div>
 </div>
 
-<!-- Invoicing section -->
 <div id="invoicing-section">
   <div id="client-list"></div>
 </div>
@@ -110,11 +102,9 @@ let PAT = '';
 let products = {};
 let clients  = {};
 
-// ─── Cookie helpers ──────────────────────────────────────────────────────────
 function setCookie(n, v) { document.cookie = n + '=' + encodeURIComponent(v) + '; path=/; SameSite=Strict'; }
 function getCookie(n) { const m = document.cookie.match('(?:^|; )' + n + '=([^;]*)'); return m ? decodeURIComponent(m[1]) : null; }
 
-// ─── API helpers ─────────────────────────────────────────────────────────────
 async function atGet(table, params = {}) {
   let url = `https://api.airtable.com/v0/${BASE}/${table}`;
   const q = new URLSearchParams();
@@ -165,7 +155,6 @@ async function auditLog(status, notes, clientId = null) {
 
 function fmt(n) { return '€' + Number(n || 0).toFixed(2); }
 
-// ─── Fetch credentials then load data ────────────────────────────────────────
 async function fetchCredentialsAndLoad() {
   showMsg('load-status', 'loading', 'Checking network credentials…');
   try {
@@ -191,28 +180,24 @@ async function fetchCredentialsAndLoad() {
   }
 }
 
-// ─── Load data ───────────────────────────────────────────────────────────────
 async function loadData() {
   showMsg('load-status', 'loading', 'Loading...');
-
   try {
-    // Load products
     const prodRecs = await atGetAll(T_PRODUCTS, {
       'fields[]': ['SKU', 'Name', 'Direct Trade Price (ex VAT)']
     });
     products = {};
     prodRecs.forEach(p => { products[p.id] = p.fields; });
 
-    // Load clients
     const clientRecs = await atGetAll(T_CLIENTS, {
       'fields[]': ['Trade Account']
     });
     clients = {};
     clientRecs.forEach(c => { clients[c.id] = c.fields['Trade Account'] || c.id; });
 
-    // Load uninvoiced Sold transactions
+    // Promo transactions are excluded — they are free of charge and never invoiced
     const txnRecs = await atGetAll(T_TXN, {
-      filterByFormula: "AND({Txn type}='Sold',{Invoice Number}='')",
+      filterByFormula: "AND({Txn type}='Sold',{Invoice Number}='',{Promo}!=TRUE())",
       'fields[]': ['Client', 'Product', 'Quantity', 'Txn ID', 'Date']
     });
 
@@ -224,7 +209,6 @@ async function loadData() {
   }
 }
 
-// ─── Render invoicing UI ─────────────────────────────────────────────────────
 function renderInvoicing(txns) {
   const section = document.getElementById('invoicing-section');
   const list    = document.getElementById('client-list');
@@ -240,7 +224,6 @@ function renderInvoicing(txns) {
     return;
   }
 
-  // Group by client
   const byClient = {};
   txns.forEach(t => {
     const cid = t.fields['Client']?.[0];
@@ -249,7 +232,6 @@ function renderInvoicing(txns) {
     byClient[cid].push(t);
   });
 
-  // Sort clients alphabetically
   const sortedClients = Object.keys(byClient).sort((a, b) =>
     (clients[a] || '').localeCompare(clients[b] || ''));
 
@@ -268,15 +250,15 @@ function renderInvoicing(txns) {
 
     let linesHtml = '';
     txnList.forEach(t => {
-      const prodId   = t.fields['Product']?.[0];
-      const prod     = prodId ? products[prodId] : null;
-      const sku      = prod?.SKU || '—';
-      const name     = prod?.Name || 'Unknown product';
-      const qty      = t.fields['Quantity'] || 0;
-      const price    = prod?.['Direct Trade Price (ex VAT)'] || 0;
+      const prodId    = t.fields['Product']?.[0];
+      const prod      = prodId ? products[prodId] : null;
+      const sku       = prod?.SKU || '—';
+      const name      = prod?.Name || 'Unknown product';
+      const qty       = t.fields['Quantity'] || 0;
+      const price     = prod?.['Direct Trade Price (ex VAT)'] || 0;
       const lineTotal = price * qty;
-      const txnId    = t.fields['Txn ID'] || '';
-      const date     = t.fields['Date'] ? new Date(t.fields['Date']).toLocaleDateString('en-GB') : '—';
+      const txnId     = t.fields['Txn ID'] || '';
+      const date      = t.fields['Date'] ? new Date(t.fields['Date']).toLocaleDateString('en-GB') : '—';
 
       linesHtml += `
         <tr>
@@ -341,7 +323,6 @@ function renderInvoicing(txns) {
   });
 }
 
-// ─── Mark as invoiced ────────────────────────────────────────────────────────
 async function markInvoiced(clientId) {
   const block   = document.getElementById('block-' + clientId);
   const txnIds  = block.dataset.txnIds.split(',').filter(Boolean);
