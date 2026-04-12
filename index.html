@@ -42,6 +42,8 @@
   .invoice-col.visible { display: table-cell; }
   .qty-col { width: 90px; }
   .remove-col { width: 40px; }
+  /* Promo badge on rows */
+  .promo-badge { display: inline-block; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 4px; font-size: 11px; font-weight: 700; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
 </style>
 </head>
 <body>
@@ -49,7 +51,7 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
-  <p class="version">v1.66</p>
+  <p class="version">v1.7</p>
   <div style="display:flex;gap:16px;margin-top:4px;">
     <a class="nav-link" href="dispatch.html">ShipStation Dispatch →</a>
     <a class="nav-link" href="invoicing.html">Trade Invoicing →</a>
@@ -130,8 +132,12 @@ const AUDIT_TABLE = 'Audit%20Trail';
 const TRADE_INV_TABLE = 'Trade%20Inventory';
 const SYSTEM = 'Trade Stock Sys';
 
+// Field ID for the Promo checkbox in Trade Transactions
+const PROMO_FIELD_ID = 'fldHPUjNW1GtiDm5A';
+
 let clients = [];
-let products = [];
+let directTradeProducts = []; // products with Sales Channel = Direct Trade
+let promoProducts = [];       // products with Sales Channel = Promo
 let tradeInventory = [];
 
 // ─── Cookie helpers ──────────────────────────────────────────────────────────
@@ -238,7 +244,7 @@ async function loadData() {
       sel.appendChild(opt);
     });
 
-    // Load products (all pages)
+    // Load products (all pages) — fetch both Direct Trade and Promo channels
     let allProducts = [], offset = null;
     do {
       let url = 'https://api.airtable.com/v0/' + BASE_ID + '/Products?fields[]=SKU&fields[]=Name&fields[]=Sales%20Channels&sort[0][field]=SKU';
@@ -248,10 +254,17 @@ async function loadData() {
       offset = data.offset;
     } while (offset);
 
-    products = allProducts.filter(p => {
+    // Split into two lists — products can appear in both
+    directTradeProducts = allProducts.filter(p => {
       const ch = p.fields['Sales Channels'];
       if (!ch) return false;
       return Array.isArray(ch) ? ch.includes('Direct Trade') : ch === 'Direct Trade';
+    });
+
+    promoProducts = allProducts.filter(p => {
+      const ch = p.fields['Sales Channels'];
+      if (!ch) return false;
+      return Array.isArray(ch) ? ch.includes('Promo') : ch === 'Promo';
     });
 
     // Load Trade Inventory (all pages)
@@ -273,7 +286,11 @@ async function loadData() {
 
     refreshProductDropdowns();
     document.getElementById('submitBtn').disabled = false;
-    showLoadStatus('success', '✓ Loaded ' + clients.length + ' clients, ' + products.length + ' products and ' + tradeInventory.length + ' inventory records.');
+    showLoadStatus('success',
+      '✓ Loaded ' + clients.length + ' clients · ' +
+      directTradeProducts.length + ' Direct Trade products · ' +
+      promoProducts.length + ' Promo products · ' +
+      tradeInventory.length + ' inventory records.');
 
   } catch(e) {
     showLoadStatus('error', 'Error loading data: ' + e.message);
@@ -303,36 +320,81 @@ function onClientOrTypeChange() {
 }
 
 // ─── Build product options for a select element ──────────────────────────────
+// Uses <optgroup> to separate Direct Trade and Promo sections.
+// Each <option> carries data-promo="true/false" so we know how it was selected.
 function buildProductOptions(selectEl, currentValue) {
   const txnType  = document.getElementById('txnType').value;
   const clientId = document.getElementById('clientSelect').value;
 
   selectEl.innerHTML = '<option value="">— Select product —</option>';
 
-  let productList = products;
-
   if (txnType === 'Sold' && clientId) {
+    // For Sold: filter both lists to only in-stock items for this client
     const stockMap = {};
     tradeInventory.forEach(r => {
       if (r.clientId === clientId && r.inStock > 0) {
         stockMap[r.productId] = r.inStock;
       }
     });
-    productList = products.filter(p => stockMap[p.id] !== undefined);
-    productList.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      const stock = stockMap[p.id];
-      opt.textContent = p.fields.SKU + (p.fields.Name ? ' — ' + p.fields.Name : '') + ' (' + stock + ' in stock)';
-      selectEl.appendChild(opt);
-    });
+
+    const dtFiltered = directTradeProducts.filter(p => stockMap[p.id] !== undefined);
+    const prFiltered = promoProducts.filter(p => stockMap[p.id] !== undefined);
+
+    if (dtFiltered.length > 0) {
+      const grp = document.createElement('optgroup');
+      grp.label = 'Direct Trade';
+      dtFiltered.forEach(p => {
+        const stock = stockMap[p.id];
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.dataset.promo = 'false';
+        opt.textContent = p.fields.SKU + (p.fields.Name ? ' — ' + p.fields.Name : '') + ' (' + stock + ' in stock)';
+        grp.appendChild(opt);
+      });
+      selectEl.appendChild(grp);
+    }
+
+    if (prFiltered.length > 0) {
+      const grp = document.createElement('optgroup');
+      grp.label = 'Promo';
+      prFiltered.forEach(p => {
+        const stock = stockMap[p.id];
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.dataset.promo = 'true';
+        opt.textContent = p.fields.SKU + (p.fields.Name ? ' — ' + p.fields.Name : '') + ' (' + stock + ' in stock)';
+        grp.appendChild(opt);
+      });
+      selectEl.appendChild(grp);
+    }
+
   } else {
-    products.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = p.fields.SKU + (p.fields.Name ? ' — ' + p.fields.Name : '');
-      selectEl.appendChild(opt);
-    });
+    // Ship / Direct Trade: show all products in both groups
+    if (directTradeProducts.length > 0) {
+      const grp = document.createElement('optgroup');
+      grp.label = 'Direct Trade';
+      directTradeProducts.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.dataset.promo = 'false';
+        opt.textContent = p.fields.SKU + (p.fields.Name ? ' — ' + p.fields.Name : '');
+        grp.appendChild(opt);
+      });
+      selectEl.appendChild(grp);
+    }
+
+    if (promoProducts.length > 0) {
+      const grp = document.createElement('optgroup');
+      grp.label = 'Promo';
+      promoProducts.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.dataset.promo = 'true';
+        opt.textContent = p.fields.SKU + (p.fields.Name ? ' — ' + p.fields.Name : '');
+        grp.appendChild(opt);
+      });
+      selectEl.appendChild(grp);
+    }
   }
 
   if (currentValue) selectEl.value = currentValue;
@@ -344,11 +406,31 @@ function refreshProductDropdowns() {
   });
 }
 
+// ─── Returns true if the selected option in a product <select> is from Promo group ─
+function isPromoSelection(selectEl) {
+  const selectedOpt = selectEl.options[selectEl.selectedIndex];
+  return selectedOpt ? selectedOpt.dataset.promo === 'true' : false;
+}
+
 // ─── Set max quantity when product selected in Sold mode ─────────────────────
 function onProductSelect(sel) {
   const txnType  = document.getElementById('txnType').value;
   const clientId = document.getElementById('clientSelect').value;
   const qtyInput = sel.closest('tr').querySelector('.qty-input');
+
+  // Update promo badge on the row
+  const row = sel.closest('tr');
+  let badge = row.querySelector('.promo-badge');
+  if (isPromoSelection(sel)) {
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'promo-badge';
+      badge.textContent = 'PROMO';
+      sel.parentNode.appendChild(badge);
+    }
+  } else {
+    if (badge) badge.remove();
+  }
 
   if (txnType === 'Sold' && clientId && sel.value) {
     const inv = tradeInventory.find(r => r.clientId === clientId && r.productId === sel.value);
@@ -407,16 +489,19 @@ async function submitForm() {
   let valid = true;
 
   rows.forEach(row => {
-    const productId  = row.querySelector('.product-select').value;
+    const productSel = row.querySelector('.product-select');
+    const productId  = productSel.value;
     const qty        = parseInt(row.querySelector('.qty-input').value);
     const invoiceNum = row.querySelector('.invoice-input')?.value.trim() || '';
+    const isPromo    = isPromoSelection(productSel);
+
     if (!productId || !qty || qty < 1) { valid = false; return; }
 
     if (txnType === 'Sold') {
       const inv = tradeInventory.find(r => r.clientId === clientId && r.productId === productId);
       const inStock = inv ? inv.inStock : 0;
       if (qty > inStock) {
-        const productName = row.querySelector('.product-select').options[row.querySelector('.product-select').selectedIndex].text;
+        const productName = productSel.options[productSel.selectedIndex].text;
         showStatus('error', `Quantity for ${productName.split(' (')[0]} exceeds stock held by this client (${inStock} in stock). Please correct before submitting.`);
         valid = false;
         return;
@@ -424,14 +509,28 @@ async function submitForm() {
     }
 
     if (txnType === 'Direct Trade') {
-      records.push({ fields: { 'Client': [clientId], 'Product': [productId], 'Txn type': 'Shipped', 'Quantity': qty } });
-      records.push({ fields: { 'Client': [clientId], 'Product': [productId], 'Txn type': 'Sold',    'Quantity': qty } });
+      // Both Shipped and Sold records get the Promo flag if selected from Promo group
+      records.push({ fields: {
+        'Client':           [clientId],
+        'Product':          [productId],
+        'Txn type':         'Shipped',
+        'Quantity':         qty,
+        [PROMO_FIELD_ID]:   isPromo
+      }});
+      records.push({ fields: {
+        'Client':           [clientId],
+        'Product':          [productId],
+        'Txn type':         'Sold',
+        'Quantity':         qty,
+        [PROMO_FIELD_ID]:   isPromo
+      }});
     } else {
       const fields = {
-        'Client':   [clientId],
-        'Product':  [productId],
-        'Txn type': txnType === 'Ship' ? 'Shipped' : txnType,
-        'Quantity': qty
+        'Client':         [clientId],
+        'Product':        [productId],
+        'Txn type':       txnType === 'Ship' ? 'Shipped' : txnType,
+        'Quantity':       qty,
+        [PROMO_FIELD_ID]: isPromo
       };
       records.push({ fields });
     }
@@ -451,7 +550,12 @@ async function submitForm() {
     }
 
     const txnLabel   = txnType === 'Direct Trade' ? 'Direct Trade (Ship + Sold)' : txnType;
-    const auditNote  = staffName + ' created ' + txnLabel + ' stock movement for ' + clientName + ' (' + rows.length + ' product(s)) — ' + reason;
+    const promoRows  = [...document.querySelectorAll('#productRows tr')]
+      .filter(r => isPromoSelection(r.querySelector('.product-select'))).length;
+    const auditNote  = staffName + ' created ' + txnLabel + ' stock movement for ' + clientName +
+      ' (' + rows.length + ' product(s))' +
+      (promoRows > 0 ? ' including ' + promoRows + ' promo item(s)' : '') +
+      ' — ' + reason;
     await writeAudit('Success', auditNote, clientId);
 
     // Refresh inventory data so dropdowns stay accurate
