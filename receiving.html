@@ -64,7 +64,7 @@
     <h1>Add Third Party Stock</h1>
     <p>Receive 3rd party vinyl via Discogs ID → Airtable Products + Stock transactions</p>
   </div>
-  <div class="version">v1.25</div>
+  <div class="version">v1.26</div>
 </header>
 
 <div class="container">
@@ -111,6 +111,18 @@
 var BASE_ID      = 'appKSv3xAO9AHTN6g';
 var PRODUCTS_TBL = 'tblvy0yjEIpAS81Hg';
 var AUDIT_TBL    = 'tbl8fC3AoyShfqvm8';
+
+// Escape HTML special characters before inserting external data into innerHTML.
+// Applied to all Discogs API data passed to log() to prevent XSS.
+function esc(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 var _pat           = '';
 var _discogsToken  = '';
@@ -376,7 +388,9 @@ async function fetchImageAsAttachment(imageUrl) {
 
 // ── Airtable helpers ──────────────────────────────────────────
 async function searchProduct(discogsId, pat) {
-  var filter = encodeURIComponent('{Discogs ID} = "' + discogsId + '"');
+  // Strip quotes and backslashes before interpolating into filterByFormula
+  var safeId = String(discogsId).replace(/["'\\]/g, '');
+  var filter = encodeURIComponent('{Discogs ID} = "' + safeId + '"');
   var res    = await fetch('https://api.airtable.com/v0/' + BASE_ID + '/' + PRODUCTS_TBL + '?filterByFormula=' + filter + '&maxRecords=1', {
     headers: { 'Authorization': 'Bearer ' + pat }
   });
@@ -491,13 +505,13 @@ async function submitForm() {
     try {
       var discogsData     = await fetchDiscogs(item.did, discogsToken);
       var parsed          = parseDiscogs(discogsData, item.cost, distributor);
-      log('  ✓ Discogs: ' + parsed.artist + ' — ' + parsed.title, 'success');
+      log('  ✓ Discogs: ' + esc(parsed.artist) + ' — ' + esc(parsed.title), 'success');
 
       var imageAttachment = await fetchImageAsAttachment(parsed.imageUrl);
 
       var youtubeUrl = await fetchYouTubeUrl(parsed.artist, parsed.title, youtubeKey);
       if (youtubeUrl) {
-        log('  ✓ YouTube: ' + youtubeUrl, 'success');
+        log('  ✓ YouTube: ' + esc(youtubeUrl), 'success');
       } else {
         log('  ℹ YouTube: no result found', 'info');
       }
@@ -509,7 +523,7 @@ async function submitForm() {
       if (action === 'created') created++; else updated++;
 
       if (parsed.releasedDateSanitised) {
-        log('  ℹ Date sanitised: ' + parsed.releasedDateSanitised, 'info');
+        log('  ℹ Date sanitised: ' + esc(parsed.releasedDateSanitised), 'info');
         await audit('Info', 'Date sanitised — Discogs ID: ' + item.did + ' — ' + parsed.releasedDateSanitised + ' | Distributor: ' + distributor, pat);
       }
 
@@ -533,7 +547,7 @@ async function submitForm() {
 
       ok++;
     } catch(err) {
-      log('  ✗ Error: ' + err.message, 'error');
+      log('  ✗ Error: ' + esc(err.message), 'error');
       await audit('Error', 'Failed — Discogs ID: ' + item.did + '\nError: ' + err.message + '\nQty: ' + item.qty + ' | Cost: €' + item.cost + '\nDistributor: ' + distributor, pat);
       errs++;
     }
