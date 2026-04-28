@@ -63,8 +63,8 @@
   .prod-search-wrap { position: relative; }
   .prod-search-input { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; color: #333; background: #fff; }
   .prod-search-input:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124,58,237,0.1); }
-  .prod-search-input.has-selection   { background: #f5f3ff; border-color: #7c3aed; color: #4c1d95; font-weight: 600; }
-  .prod-search-input.promo-selection { background: #fffbeb; border-color: #d97706; color: #92400e; font-weight: 600; }
+  .prod-search-input.has-selection   { background: #f5f3ff; border-color: #7c3aed; color: #4c1d95; font-weight: 600; cursor: default; }
+  .prod-search-input.promo-selection { background: #fffbeb; border-color: #d97706; color: #92400e; font-weight: 600; cursor: default; }
 
   .prod-results { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #ddd; border-top: none; border-radius: 0 0 6px 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 100; max-height: 240px; overflow-y: auto; display: none; }
   .prod-results.open { display: block; }
@@ -86,7 +86,7 @@
 <div class="card">
   <h1>Trade Stock Movement</h1>
   <p class="subtitle">Enter stock movements for trade clients</p>
-  <p class="version">v1.74</p>
+  <p class="version">v1.75</p>
   <div style="display:flex;gap:16px;margin-top:4px;">
     <a class="nav-link" href="dispatch.html">ShipStation Dispatch →</a>
     <a class="nav-link" href="invoicing.html">Trade Invoicing →</a>
@@ -356,6 +356,7 @@ function setRowChannel(tr, channel) {
   tr.dataset.productId = '';
   const input = tr.querySelector('.prod-search-input');
   if (input) {
+    input.readOnly = false; // v1.75 — allow searching again after channel switch
     input.classList.remove('has-selection', 'promo-selection');
     const badge = tr.querySelector('.promo-badge');
     if (badge) badge.remove();
@@ -375,6 +376,7 @@ function clearRowSelection(tr) {
   tr.dataset.productId = '';
   const input = tr.querySelector('.prod-search-input');
   if (input) {
+    input.readOnly = false; // v1.75 — allow searching again after clearing
     input.value = '';
     input.classList.remove('has-selection', 'promo-selection');
     input.placeholder = 'Type SKU or name…';
@@ -464,6 +466,7 @@ function selectProduct(tr, productId, sku, name, isPromo) {
   input.value = esc(sku) + (name ? ' — ' + esc(name) : '');
   input.classList.remove('has-selection', 'promo-selection');
   input.classList.add(isPromo ? 'promo-selection' : 'has-selection');
+  input.readOnly = true; // v1.75 — prevent overtyping the displayed product name (× to remove row to change product)
 
   let badge = tr.querySelector('.promo-badge');
   if (isPromo) {
@@ -550,7 +553,7 @@ function addRow() {
         <input type="text" class="prod-search-input" placeholder="Type SKU or name…"
           autocomplete="off"
           oninput="showResults(this.closest('tr'), searchProducts(this.closest('tr'), this.value))"
-          onfocus="showResults(this.closest('tr'), searchProducts(this.closest('tr'), this.value))"
+          onfocus="if (!this.readOnly) showResults(this.closest('tr'), searchProducts(this.closest('tr'), this.value))"
           onblur="onSearchBlur(event, this.closest('tr'))"
           onkeydown="handleSearchKey(event, this.closest('tr'))">
         <div class="prod-results"></div>
