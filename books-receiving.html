@@ -1,4 +1,18 @@
 <!DOCTYPE html>
+<!--
+  BookBot — Book Receiving (SEVEN Berlin)
+  Repo: glennsevenberlin/seven-trade-form
+  Backend: seven.berlin/books/books-image-proxy.php
+
+  Version history:
+    v1.0 — initial release. Google Books primary, Open Library fallback.
+           ISBN scan / lookup, cover image proxy via Airtable, draft
+           Products written with static customs defaults.
+    v1.1 — 28 April 2026. Tax class fix: now writes Tax class = 'reduced-rate'
+           on every book (field fldYuz8MtBThPGvkj). Books in DE are subject to
+           7% reduced VAT, not 19% standard. Previously all imported books
+           defaulted to standard rate downstream in WooCommerce.
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -367,7 +381,7 @@
     <div class="header-logo">SEVEN Berlin</div>
     <div class="header-title">BookBot — Book Receiving</div>
   </div>
-  <div class="header-version">v1.0</div>
+  <div class="header-version">v1.1</div>
 </div>
 
 <!-- Credentials -->
@@ -440,6 +454,7 @@ const F = {
   REGULAR_PRICE: 'fldsWSfTRjLGIOret',
   COST_EX_VAT:   'fldjBrxaUM0Vnmb1Y',
   TAX_STATUS:    'fldvfQw3Nmhmj3nu0',
+  TAX_CLASS:     'fldYuz8MtBThPGvkj',
   PRODUCT_IMAGE: 'fldAtPIG6UR25RD0A',
   RELEASE_TITLE: 'fldidiIB2SrA5bc4d',
   ARTIST_NAME:   'fld6F9w33m9pIH6ct',
@@ -993,6 +1008,7 @@ async function upsertProduct(isbn, qty, cost, supplier, book, log) {
     [F.STATUS]:        'draft',
     [F.CAT_VIS]:       'hidden',
     [F.TAX_STATUS]:    'taxable',
+    [F.TAX_CLASS]:     'reduced-rate',
     [F.PRODUCT_TYPE]:  'simple',
     [F.SALES_CHANNELS]:['Online', 'In-Store'],
   };
